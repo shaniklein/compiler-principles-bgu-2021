@@ -10,11 +10,9 @@ let ntHashtag = char '#';;
 let ntSlash = char '/';;
 let ntDot = char '.';;
 
-let posDig = range '1' '9';;
-let zero = char '0';;
-let zeros = star zero;;
-let digit = disj zero posDig;;
+let digit = range '0' '9';;
 let digitSeq = plus digit;;
+
 
 (* ------------------------ *)
 
@@ -41,7 +39,7 @@ let parseBool s =
 
 (* ------------------------ *)
 
-(* 3.3.2 & 7 Numbers *)
+(* 3.3.2 & 4 & 7 Numbers *)
 
 (* returns  int (-1 or 1 as sign) * char list (rest of the number) 
 	later one need to multiply sign by the parsed number *)
@@ -86,17 +84,16 @@ let mantissa s =
 		0.0 in
 		f /. 10.;;
 
-
+(* Naturals parser *)
 let parseNat s = 
-	let (sign,numLst) = ntSign s 
-	and twoLast =  fun ((_,a),b) -> a,b in
-	let (noLeadZero,ls) = twoLast( pack digitSeq zeros numLst ) in
-	(sign * (nat noLeadZero),ls);;
+	let sign,ls = ntSign s in
+	let numLst, ls =  digitSeq ls in
+	(sign * (nat numLst),ls);;
 
-let parseMantissa numLst = 
-	let ((zr,noLeadZero),ls) = pack digitSeq zeros numLst 
-	and first = fun (a,_) -> a in
-	( mantissa (List.append zr (first (star(posDig) noLeadZero))), ls);;
+(* Mantissa parser *)
+let parseMantissa ls = 
+	let nums,ls = digitSeq ls in
+	( (mantissa nums), ls);;
 
 
 (* return the greatest common divisor of two numbers *)
@@ -106,20 +103,12 @@ let gcd a b =
 		if b=0 then a else recGcd b (a mod b) in
 		recGcd a b;;
 
-(* returns sexpr (of Number ) * char list (of unparesd characters)
-		example: parseNum (string_to_list "+0034.0100");; *)
-let parseNum s = 
-	let n1,ls = parseNat s in
-	try let _, ls = ntSlash ls in
-		let n2,ls = parseNat ls in
-		let gcdNum = gcd n1 n2 in
-		(Fraction (n1/gcdNum,n2/gcdNum) , ls)
-	with X_no_match ->
-	try let _, ls = ntDot ls in
-		let n2,ls = parseMantissa ls in
-		let fltNum = if n1>0 then (float_of_int n1) +. n2 else (float_of_int n1) -. n2 in
-		(Float (fltNum), ls)
-	with X_no_match -> (Fraction (n1,1),ls);;
+(* return parsed number as int after E if exists 
+	example: parseScientific ['e';'0';'2';...] -> (2,..) *)
+let parseScientific s = 
+	let ntE = char_ci 'e' in
+	let _,ls = ntE s in
+	parseNat ls ;;
 
 (* float*int->float
 	return nEe *)
@@ -127,4 +116,33 @@ let rec raiseExp n e =
 	if e =0 then n else 
 		if e>0 then raiseExp (n*.10.0) (e -1) 
 				 else raiseExp (n/.10.0) (e +1) ;;
+
+(* returns sexpr (of Number ) * char list (of unparesd characters)
+		example: parseNum (string_to_list "+0034.0100");; *)
+let parseNum s = 
+	let n1,ls = parseNat s in
+	(* fraction *)
+	try let _, ls = ntSlash ls in
+		let n2,ls = parseNat ls in
+		let gcdNum = gcd n1 n2 in
+		(Fraction (n1/gcdNum,n2/gcdNum) , ls)
+	with X_no_match ->
+	(* float *)
+	try let _, ls = ntDot ls in
+		let n2,ls = parseMantissa ls in
+		let fltNum = if n1>0 then (float_of_int n1) +. n2 else (float_of_int n1) -. n2 in
+		(* scientific float *)
+		try let e,ls = parseScientific ls in
+			let exp = raiseExp fltNum e in
+			(Float(exp), ls)
+		with X_no_match ->
+		(Float (fltNum), ls)
+	with X_no_match -> 
+	(* scientific int *)
+	try let e,ls = parseScientific ls in
+		let exp = raiseExp (float(n1)) e in
+		(Float(exp), ls)
+	with X_no_match ->
+	(* int as fraction*)
+	(Fraction (n1,1),ls);;
 	
