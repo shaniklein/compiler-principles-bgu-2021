@@ -71,5 +71,36 @@ let nt_string =
 	let nt_quote= char '\"' in
 	let nt=  caten nt_quote (caten (star nt_string_char) nt_quote) in
 	nt;;
+
+(* 3.3.5 Char *)
+let nt_char_prefix = word "#\\";;
+let nt_nul = word_ci "nul";;
+let nt_newline = word_ci "newline";;
+let nt_return = word_ci "return";;
+let nt_tab = word_ci "tab";;
+let nt_page = word_ci "page";;
+let nt_space = word_ci "space";;
+
+let nt_null_to_char  = pack nt_nul (fun (ds) -> '\000');;
+let nt_newline_to_char  = pack nt_newline (fun (ds) -> '\010');;
+let nt_return_to_char  = pack nt_return (fun (ds) -> '\013');;
+let nt_tab_to_char  = pack nt_tab (fun (ds) -> '\009');; 
+let nt_page_to_char  = pack nt_page (fun (ds) -> '\012');;
+let nt_space_to_char  = pack nt_space (fun (ds) -> '\032');;
+
+let nt_named_char = disj_list [nt_null_to_char;nt_newline_to_char;nt_return_to_char;nt_space_to_char;nt_tab_to_char;nt_page_to_char];;
+
+let nt_named_chars = caten nt_char_prefix nt_named_char;;
+(*any charachter that greater than the space character in the ASCII table*)
+let nt_visible_char = caten nt_char_prefix (range '\032' '\255');;
+
+
+let nt_char  =
+  let test = disj nt_named_chars nt_visible_char in
+  pack test (fun (ds) -> match ds with
+      |(_,l) -> Char (l)
+    );;
+
+
   
 end;; (* struct Reader *)
