@@ -43,9 +43,48 @@ let normalize_scheme_symbol str =
 
 
 let read_sexprs string = raise X_not_yet_implemented;;
+ 
+ 
+
+(*3.3.3 Symbol*)
+
+(*As we saw in RS3 the range parser constructor takes two chars and returns a parser that accepts a single char in the given character range*)
+let nt_lower_case = range 'a' 'z';;
+(*As requested, Our parser convert all literal symbol characters to lowercase *)
+let nt_upper_case = pack (range 'A' 'Z') (fun(x) -> Char.lowercase_ascii x );;
+let digits = range '0' '9';;
+
+let nt_special_char = 
+  let nt_exclemation = char '!' in
+  let nt_dollar =  char '$' in
+  let nt_power = char '^' in
+  let nt_star = char '*' in
+  let nt_score =  char '-'  in
+  let nt_underscore =  char '_' in
+  let nt_eq =  char '='  in
+  let nt_plus = char '+' in
+  let nt_left_arrow =  char '<' in
+  let nt_right_arrow =  char '>' in
+  let nt_slash =  char '/' in
+  let nt_quest_mark =  char '?' in
+  let nt_colon =  char ':' in  
+  let nt = disj_list [nt_exclemation ; nt_dollar ; nt_power ; nt_star ; nt_score ; nt_underscore ; nt_eq ; nt_plus ; 
+                      nt_left_arrow ; nt_right_arrow ; nt_quest_mark ; nt_slash ; nt_colon ] in
+  nt;;
+let nt_dot= char '.';;
+
+let nt_symbol_char_no_dot =    
+  let nt = disj_list [nt_lower_case;nt_upper_case;digits ; nt_special_char; ] in  
+  nt;;
   
+  let nt_symbol_char=
+	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot] in
+  nt;;
   
-  (*3.3.4 String*)
+(*TODO -define nt_symbol and*)
+(*TODO- find how to make dot illegal*)
+  
+ (*3.3.4 String*)
 (* String  *)
 let nt_string_meta_chars =
   let nt_return = pack (word_ci "\\r") (fun _ ->'\r') in
