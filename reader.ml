@@ -140,6 +140,12 @@ let nt_char  =
       |(_,l) -> Char (l)
     );;
 
+(*3.3.6 Nil*)
+ let nt_PL = caten (char '(') nt_star_whitespace in
+    let nt_PR = caten nt_star_whitespace (char ')') in
+    let nt_nil = caten nt_PL nt_PR in
+    let nt_nil = pack nt_nil (fun _ -> Nil) ;;
 
+  
   
 end;; (* struct Reader *)
