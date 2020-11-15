@@ -43,8 +43,29 @@ let normalize_scheme_symbol str =
 
 
 let read_sexprs string = raise X_not_yet_implemented;;
- 
- 
+ end;; (* struct Reader *)
+
+
+ (*Abstract*)
+ (*This code is from RS3*)
+ let nt_whitespaces = star (char ' ');;
+let digit = range '0' '9';;
+
+(*takes 3 parsers , concate them and remove the left and right parts*)
+let make_paired nt_left nt_right nt =
+let nt = caten nt_left nt in
+let nt = pack nt (function (_, e) -> e) in
+let nt = caten nt nt_right in
+let nt = pack nt (function (e, _) -> e) in
+  nt;;
+
+
+let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
+let tok_lparen = make_spaced ( char '(');;
+let tok_rparen = make_spaced ( char ')');; 
+(*end of code from RS3*)
+(* recognize dot with spaces*)
+let tok_dot = make_spaced (char '.');;
 
 (*3.3.3 Symbol*)
 
@@ -78,11 +99,14 @@ let nt_symbol_char_no_dot =
   nt;;
   
   let nt_symbol_char=
-	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot] in
+	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot ] in
   nt;;
-  
-(*TODO -define nt_symbol and*)
-(*TODO- find how to make dot illegal*)
+	
+	 
+	let nt_symbol_char_with_dot= caten nt_symbol_char ( plus nt_symbol_char);;		
+	(*TODO - WE cannot dij this because it has different type - need to fix!*)	
+	(*let symbol=
+	disj nt_symbol_char_no_dot nt_symbol_char_with_dot ;;*)
   
  (*3.3.4 String*)
 (* String  *)
@@ -140,12 +164,14 @@ let nt_char  =
       |(_,l) -> Char (l)
     );;
 
-(*3.3.6 Nil*)
- let nt_PL = caten (char '(') nt_star_whitespace in
-    let nt_PR = caten nt_star_whitespace (char ')') in
-    let nt_nil = caten nt_PL nt_PR in
-    let nt_nil = pack nt_nil (fun _ -> Nil) ;;
 
-  
-  
-end;; (* struct Reader *)
+(*3.3.6 Nil*)
+let nt_nil = caten tok_lparen tok_dot in
+	(*TODO-add support in comments*)
+	(*let nt_nil_with_comments = *)
+    let nt_nil = pack nt_nil (fun _ -> Nil) in
+	nt_nil;;
+	
+(*TODO*)
+(*3.3.7 Pair - List and dotted list*)
+(* List *)
