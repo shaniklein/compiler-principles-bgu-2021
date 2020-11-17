@@ -13,7 +13,12 @@ let ntDot = char '.';;
 let digit = range '0' '9';;
 let digitSeq = plus digit;;
 
+let nt_Quoted = char '\'';;
+let nt_QQuoted = char '`';;
+let nt_Unquoted = char ',';;
+let nt_UnquotedSpliced = word ",@";;
 
+let nt_Sexpr_Comment = word_ci "#;";;
 (* ------------------------ *)
 
 
@@ -34,8 +39,7 @@ let parseBool s =
 			(Bool(false), rest(f)) 
 		with X_no_match -> nt_none()
 	with X_no_match -> nt_none();;
-(* 		with X_no_match -> (Nil,tst)
-	with X_no_match -> (Nil,s);; *)
+
 
 (* ------------------------ *)
 
@@ -125,7 +129,7 @@ let parseNum s =
 	try let _, ls = ntSlash ls in
 		let n2,ls = parseNat ls in
 		let gcdNum = gcd n1 n2 in
-		(Fraction (n1/gcdNum,n2/gcdNum) , ls)
+		(Number(Fraction (n1/gcdNum,n2/gcdNum)) , ls)
 	with X_no_match ->
 	(* float *)
 	try let _, ls = ntDot ls in
@@ -134,15 +138,142 @@ let parseNum s =
 		(* scientific float *)
 		try let e,ls = parseScientific ls in
 			let exp = raiseExp fltNum e in
-			(Float(exp), ls)
+			(Number(Float(exp)), ls)
 		with X_no_match ->
-		(Float (fltNum), ls)
+		(Number(Float (fltNum)), ls)
 	with X_no_match -> 
 	(* scientific int *)
 	try let e,ls = parseScientific ls in
 		let exp = raiseExp (float(n1)) e in
-		(Float(exp), ls)
+		(Number(Float(exp)), ls)
 	with X_no_match ->
 	(* int as fraction*)
-	(Fraction (n1,1),ls);;
+	(Number(Fraction (n1,1)),ls);;
 	
+
+let ntSemicolon= char ';';; 
+(* Need to combine with other StringMetaChar *)
+let ntEndOfLine = char '\n';;
+
+(* 3.2.2 Line Comments *)
+let rec skipComment s = 
+	if s=[] then [] else
+	try let _,ls = ntEndOfLine s in
+		ls
+	with X_no_match -> (skipComment (List.tl s));;
+
+let parseLineComment s = 
+	let _,ls = ntSemicolon s in
+	skipComment ls;;
+
+(* convert list of chars to Symbol *)
+let makeSymbol s = 
+	Symbol(list_to_string s);;
+
+(* return the string part from parser *)
+let getString s = 
+	let r,ls = nt_string s in
+	let _,(st,_) = r in
+	(st,ls);;
+
+(* convets list of sexper to nested Pair *)
+let rec list_to_pair l = 
+		let car = List.hd l and
+		cdr = List.tl l in
+		match cdr with
+		| [Nil] -> Pair(car,Nil)
+		| [] -> Pair(car,Nil)
+		| _ -> Pair(car, (list_to_pair cdr)) ;;
+		
+
+
+(* parse the first sexpr and return the rest as char list *)
+let rec parse_One_Sexpr s = 
+		if s=[] then (Nil,[]) else
+	(* white spaces *)
+	let w,rest = nt_whitespaces s in
+		if w != [] then 
+		parse_One_Sexpr rest
+		else
+	(* Bool *)
+	try let a,rest = parseBool s in
+		(a,rest)
+	with X_no_match ->
+	(* Number *)
+	try let a,rest = parseNum s in
+		(a,rest)
+	with X_no_match -> 
+	(* Symbol *)
+	try let a,rest = (plus nt_symbol_char) s in
+		((makeSymbol a),rest)
+	with X_no_match ->
+	(* String *)
+	try let a,rest = getString s in
+		(String(list_to_string a),rest)
+	with X_no_match ->
+	(* ( *)
+	try let a,rest = tok_lparen s in
+		let p,rest = parse_Sexpr rest [] in
+		(list_to_pair(p),rest)
+	with X_no_match ->
+	(* ) *)
+	try let a,rest = tok_rparen s in
+		(Symbol(list_to_string [a]),rest) 
+	with X_no_match ->
+	(* Line Comments *)
+	try let ls = parseLineComment s in
+		parse_One_Sexpr ls
+	with X_no_match ->
+	(* Quotes *)
+	try 
+		parse_QuoteLike s
+	with X_no_match ->
+	let rest = parse_Sexpr_Comments s in
+		parse_One_Sexpr rest
+
+	(* 3.3.8 Quote-like forms *)
+	and parse_QuoteLike s = 
+		(*qoute*)
+		try let _,ls = nt_Quoted s in
+			let p,rest = parse_One_Sexpr ls in
+			(Pair(Symbol("qoute"),Pair(p,Nil)),rest)
+		with X_no_match -> 
+		(*quasiqoute*)
+		try let _,ls = nt_QQuoted s in
+			let p,rest = parse_One_Sexpr ls in
+			(Pair(Symbol("quasiqoute"),Pair(p,Nil)),rest)
+		with X_no_match -> 
+		(*unquote-splicing*)
+		try let _,ls = nt_UnquotedSpliced s in
+			let p,rest = parse_One_Sexpr ls in
+			(Pair(Symbol("unquote-splicing"),Pair(p,Nil)),rest)
+		with X_no_match ->
+		(*unquote*)
+		try let _,ls = nt_Unquoted s in
+			let p,rest = parse_One_Sexpr ls in
+			(Pair(Symbol("unquote"),Pair(p,Nil)),rest)
+		with X_no_match ->
+		nt_none() 
+
+
+	(* 3.2.3 Sexpr Comments *)
+	(* TODO: make sure its VALID sexpr. it works now on any sexpr *)
+	and parse_Sexpr_Comments s = 
+		let _, ls = nt_Sexpr_Comment s in
+		let one,rest = parse_One_Sexpr ls in 
+		rest
+
+	(* parse all sexprs 
+		s 		- char list
+		sexprs  - sexpr list it already parsed *)
+	and parse_Sexpr s sexpr_ls= 
+		if s=[] then (sexpr_ls,[]) else
+		let one,rest = parse_One_Sexpr s in
+			if one=Symbol(")") then (sexpr_ls,rest) else
+			parse_Sexpr rest (sexpr_ls@[one]) ;;
+		
+
+(* TODO: change this to read_sexprs in reader.ml *)
+let read_sexprs3 s =
+	let p,_ = parse_Sexpr (string_to_list s) [] in
+	p;;
