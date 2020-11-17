@@ -95,21 +95,18 @@ let nt_special_char =
 let nt_dot= char '.';;
 
 let nt_symbol_char_no_dot =    
-  let nt = disj_list [nt_lower_case;nt_upper_case;digits ; nt_special_char; ] in  
+  let nt = disj_list [nt_lower_case;nt_upper_case;digits ; nt_special_char; ] in
   nt;;
   
   let nt_symbol_char=
 	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot ] in
   nt;;
-	
-	 
-	let nt_symbol_char_with_dot= caten nt_symbol_char ( plus nt_symbol_char);;		
-	(*TODO - WE cannot dij this because it has different type - need to fix!*)	
-	(*let symbol=
-	disj nt_symbol_char_no_dot nt_symbol_char_with_dot ;;*)
+  
+	let nt_symbol_char_with_dot=caten nt_symbol_char (plus nt_symbol_char);;
   
  (*3.3.4 String*)
 (* String  *)
+
 let nt_string_meta_chars =
   let nt_return = pack (word_ci "\\r") (fun _ ->'\r') in
   let nt_newline = pack (word_ci "\\n") (fun _ ->'\n') in
@@ -119,7 +116,7 @@ let nt_string_meta_chars =
   let nt_quote = pack (word "\\\"") (fun _ -> '"') in
   let nt = disj_list [nt_return; nt_newline; nt_tab; nt_f; nt_backslash; nt_quote;] in
   nt;; 
-
+	
 (*any character other than backslash  or double qoute *)
 let nt_string_literal_char = pack (range '\032' '\255') (fun(ds) -> match ds with
     | '\\' -> raise X_no_match
@@ -131,12 +128,17 @@ let nt_string_char =
   nt;;
 
 let nt_string = 	
-	let nt_quote= char '\"' in
-	let nt=  caten nt_quote (caten (star nt_string_char) nt_quote) in
-	nt;;
+  let nt = caten_list [(pack (char '"') (fun(ds) -> [ds])) ; (star nt_string_char) ; (pack (char '"') (fun(ds) -> [ds]))] in
+  let nt = pack nt (fun(ds) -> match ds with
+      | [a;b;c] -> b
+      | _ -> raise X_no_match) in
+  pack nt (fun(ds) -> String (list_to_string ds));;
+
+
 
 (* 3.3.5 Char *)
 let nt_char_prefix = word "#\\";;
+
 let nt_nul = word_ci "nul";;
 let nt_newline = word_ci "newline";;
 let nt_return = word_ci "return";;
@@ -166,12 +168,14 @@ let nt_char  =
 
 
 (*3.3.6 Nil*)
-let nt_nil = caten tok_lparen tok_dot in
+let nt_nil =
+	let nt= caten tok_lparen tok_rparen in
 	(*TODO-add support in comments*)
 	(*let nt_nil_with_comments = *)
-    let nt_nil = pack nt_nil (fun _ -> Nil) in
-	nt_nil;;
+    let nt = pack nt (fun _ -> Nil) in
+	nt;;
 	
+
 (*TODO*)
 (*3.3.7 Pair - List and dotted list*)
 (* List *)
