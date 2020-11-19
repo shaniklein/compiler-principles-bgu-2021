@@ -43,8 +43,21 @@ let normalize_scheme_symbol str =
 
 (*Abstract*)
  (*This code is from RS3*)
- let nt_whitespaces = star (char ' ');;
+let nt_whitespaces = star (char ' ');;
+let ntHashtag = char '#';;
+let ntSlash = char '/';;
+let ntDot = char '.';;
+
 let digit = range '0' '9';;
+let digitSeq = plus digit;;
+
+let nt_Quoted = char '\'';;
+let nt_QQuoted = char '`';;
+let nt_Unquoted = char ',';;
+let nt_UnquotedSpliced = word ",@";;
+
+let nt_Sexpr_Comment = word_ci "#;";;
+(* ------------------------ *)
 
 (*takes 3 parsers , concate them and remove the left and right parts*)
 let make_paired nt_left nt_right nt =
@@ -97,8 +110,17 @@ let nt_symbol_char_no_dot =
 	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot ] in
   nt;;
   
-	let nt_symbol_char_with_dot=caten nt_symbol_char (plus nt_symbol_char);;
-  
+	let nt_symbol_char_with_dot=
+		let nt=caten nt_symbol_char (plus nt_symbol_char) in
+		let nt=pack nt (fun (a,b)->list_to_string(a::b)) in
+		nt;;
+	
+	let nt_symbol = 
+	let nt=pack nt_symbol_char_no_dot (fun ds-> list_to_string([ds])) in
+	let nt=disj nt nt_symbol_char_with_dot in 
+	let nt=pack nt (fun (ds)->Symbol (ds)) in
+	nt;;
+		
  (*3.3.4 String*)
 (* String  *)
 
@@ -136,8 +158,6 @@ let nt_string =
       | _ -> raise X_no_match) in
   pack nt (fun(ds) -> String (list_to_string ds));;
 *)
-
-(* 3.3.5 Char here *)
 
 (* 3.3.5 Char *)
 let nt_char_prefix = word "#\\";;
@@ -183,22 +203,7 @@ let nt_nil =
 (*3.3.7 Pair - List and dotted list*)
 (* List *)
 
-(* Atomics *)
 
-let ntHashtag = char '#';;
-let ntSlash = char '/';;
-let ntDot = char '.';;
-
-let digit = range '0' '9';;
-let digitSeq = plus digit;;
-
-let nt_Quoted = char '\'';;
-let nt_QQuoted = char '`';;
-let nt_Unquoted = char ',';;
-let nt_UnquotedSpliced = word ",@";;
-
-let nt_Sexpr_Comment = word_ci "#;";;
-(* ------------------------ *)
 
 
 (* 3.3.1 Boolean *)
@@ -345,9 +350,6 @@ let parseLineComment s =
 	let _,ls = ntSemicolon s in
 	skipComment ls;;
 
-(* convert list of chars to Symbol *)
-let makeSymbol s = 
-	Symbol(list_to_string s);;
 
 (* return the string part from parser *)
 let getString s = 
@@ -384,8 +386,8 @@ let rec parse_One_Sexpr s =
 		(a,rest)
 	with X_no_match -> 
 	(* Symbol *)
-	try let a,rest = (plus nt_symbol_char) s in
-		((makeSymbol a),rest)
+	try let a,rest =  nt_symbol s in
+		(a,rest)
 	with X_no_match ->
 	(* String *)
 	try let a,rest = getString s in
@@ -460,3 +462,6 @@ let read_sexprs s = let p,_ = parse_Sexpr (string_to_list s) [] in
 	p;;
  end;; (* struct Reader *)
  
+ 
+
+	
