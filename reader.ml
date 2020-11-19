@@ -93,136 +93,6 @@ let parseBool s =
 	with X_no_match -> nt_none();;
 
 
-
-(*3.3.3 Symbol*)
-(*As we saw in RS3 the range parser constructor takes two chars and returns a parser that accepts a single char in the given character range*)
-let nt_lower_case = range 'a' 'z';;
-(*As requested, Our parser convert all literal symbol characters to lowercase *)
-let nt_upper_case = pack (range 'A' 'Z') (fun(x) -> Char.lowercase_ascii x );;
-let digits = range '0' '9';;
-
-let nt_special_char = 
-  let nt_exclemation = char '!' in
-  let nt_dollar =  char '$' in
-  let nt_power = char '^' in
-  let nt_star = char '*' in
-  let nt_score =  char '-'  in
-  let nt_underscore =  char '_' in
-  let nt_eq =  char '='  in
-  let nt_plus = char '+' in
-  let nt_left_arrow =  char '<' in
-  let nt_right_arrow =  char '>' in
-  let nt_slash =  char '/' in
-  let nt_quest_mark =  char '?' in
-  let nt_colon =  char ':' in  
-  let nt = disj_list [nt_exclemation ; nt_dollar ; nt_power ; nt_star ; nt_score ; nt_underscore ; nt_eq ; nt_plus ; 
-                      nt_left_arrow ; nt_right_arrow ; nt_quest_mark ; nt_slash ; nt_colon ] in
-  nt;;
-let nt_dot= char '.';;
-
-let nt_symbol_char_no_dot =    
-  let nt = disj_list [nt_lower_case;nt_upper_case;digits ; nt_special_char; ] in
-  nt;;
-  
-  let nt_symbol_char=
-	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot ] in
-  nt;;
-  
-	let nt_symbol_char_with_dot=
-		let nt=caten nt_symbol_char (plus nt_symbol_char) in
-		let nt=pack nt (fun (a,b)->list_to_string(a::b)) in
-		nt;;
-	
-	let nt_symbol = 
-	let nt=pack nt_symbol_char_no_dot (fun ds-> list_to_string([ds])) in
-	let nt=disj nt nt_symbol_char_with_dot in 
-	let nt=pack nt (fun (ds)->Symbol (ds)) in
-	nt;;
-		
- (*3.3.4 String*)
-  let nt_string_meta_chars =
-  let nt_backslash = pack (word "\\\\") (fun _ -> '\\') in
-  let nt_quote = pack (word "\\\"") (fun _ -> '"') in
-  let nt_tab = pack (word_ci "\\t") (fun _ -> '\t') in
-  let nt_f = pack (word_ci "\\f") (fun _ -> '\012') in
-  let nt_n = pack (word_ci "\\n") (fun _ ->'\n') in
-  let nt_r = pack (word_ci "\\r") (fun _ ->'\r') in
-  let nt = disj_list [nt_backslash; nt_quote; nt_tab; nt_f; nt_n; nt_r;] in
-  nt;; 
- 
-
-(*any character other than backslash  or double qoute *)
-let nt_string_literal_char = pack (range '\032' '\255') (fun(ds) -> match ds with
-    | '\\' -> raise X_no_match
-    | '\"' -> raise X_no_match
-    | _ -> ds );;
-
-let nt_string_char = 
-  let nt = disj nt_string_literal_char nt_string_meta_chars in
-  nt;;
-
-let nt_string =
-    let nt_quote = char '\"' in
-    let nt_str = diff nt_any (one_of "\\\"") in
-    let nt_str = disj nt_str nt_string_meta_chars in
-    let nt_str = star nt_str in
-    let nt = caten nt_quote (caten nt_str nt_quote) in
-	nt;;
-
-(*let nt_string = 	
-	let nt_quote= char '\"' in
-	let nt=  caten nt_quote (caten (star nt_string_char) nt_quote) in
-	nt;;*)
-
-(* 3.3.5 Char *)
-let nt_char_prefix = word "#\\";;
-
-let nt_nul = word_ci "nul";;
-let nt_newline = word_ci "newline";;
-let nt_return = word_ci "return";;
-let nt_tab = word_ci "tab";;
-let nt_page = word_ci "page";;
-let nt_space = word_ci "space";;
-
-let nt_null_to_char  = pack nt_nul (fun (ds) -> '\000');;
-let nt_newline_to_char  = pack nt_newline (fun (ds) -> '\010');;
-let nt_return_to_char  = pack nt_return (fun (ds) -> '\013');;
-let nt_tab_to_char  = pack nt_tab (fun (ds) -> '\009');; 
-let nt_page_to_char  = pack nt_page (fun (ds) -> '\012');;
-let nt_space_to_char  = pack nt_space (fun (ds) -> '\032');;
-
-let nt_named_char = disj_list [nt_null_to_char;nt_newline_to_char;nt_return_to_char;nt_space_to_char;nt_tab_to_char;nt_page_to_char];;
-
-let nt_named_chars = caten nt_char_prefix nt_named_char;;
-(*any charachter that greater than the space character in the ASCII table*)
-let nt_visible_char = caten nt_char_prefix (range '\032' '\255');;
-
-
-let nt_char  =
-  let test = disj nt_named_chars nt_visible_char in
-  pack test (fun (ds) -> match ds with
-      |(_,l) -> Char (l)
-    );;
-
-
-(*3.3.6 Nil*)
-let nt_nil =
-	let nt= caten tok_lparen tok_rparen in
-	(*TODO-add support in comments*)
-	(*let nt_nil_with_comments = *)
-    let nt = pack nt (fun _ -> Nil) in
-	nt;;
-	
-
-(*TODO*)
-(*3.3.7 Pair - List and dotted list*)
-(* List *)
-
-
-
-
-(* ------------------------ *)
-
 (* 3.3.2 & 4 & 7 Numbers *)
 
 (* returns  int (-1 or 1 as sign) * char list (rest of the number) 
@@ -331,6 +201,130 @@ let parseNum s =
 	(Number(Fraction (n1,1)),ls);;
 	
 
+(*3.3.3 Symbol*)
+(*As we saw in RS3 the range parser constructor takes two chars and returns a parser that accepts a single char in the given character range*)
+let nt_lower_case = range 'a' 'z';;
+(*As requested, Our parser convert all literal symbol characters to lowercase *)
+let nt_upper_case = pack (range 'A' 'Z') (fun(x) -> Char.lowercase_ascii x );;
+let digits = range '0' '9';;
+
+let nt_special_char = 
+  let nt_exclemation = char '!' in
+  let nt_dollar =  char '$' in
+  let nt_power = char '^' in
+  let nt_star = char '*' in
+  let nt_score =  char '-'  in
+  let nt_underscore =  char '_' in
+  let nt_eq =  char '='  in
+  let nt_plus = char '+' in
+  let nt_left_arrow =  char '<' in
+  let nt_right_arrow =  char '>' in
+  let nt_slash =  char '/' in
+  let nt_quest_mark =  char '?' in
+  let nt_colon =  char ':' in  
+  let nt = disj_list [nt_exclemation ; nt_dollar ; nt_power ; nt_star ; nt_score ; nt_underscore ; nt_eq ; nt_plus ; 
+                      nt_left_arrow ; nt_right_arrow ; nt_quest_mark ; nt_slash ; nt_colon ] in
+  nt;;
+let nt_dot= char '.';;
+
+let nt_symbol_char_no_dot =    
+  let nt = disj_list [nt_lower_case;nt_upper_case;digits ; nt_special_char; ] in
+  nt;;
+  
+  let nt_symbol_char=
+	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot ] in
+  nt;;
+  
+	let nt_symbol_char_with_dot=
+		let nt=caten nt_symbol_char (plus nt_symbol_char) in
+		let nt=pack nt (fun (a,b)->list_to_string(a::b)) in
+		nt;;
+	
+	let nt_symbol = 
+	let nt=pack nt_symbol_char_no_dot (fun ds-> list_to_string([ds])) in
+	let nt=disj nt_symbol_char_with_dot  nt in 
+	let nt=pack nt (fun (ds)->Symbol (ds)) in
+	nt;;
+		
+ (*3.3.4 String*)
+  let nt_string_meta_chars =
+  let nt_backslash = pack (word "\\\\") (fun _ -> '\\') in
+  let nt_quote = pack (word "\\\"") (fun _ -> '"') in
+  let nt_tab = pack (word_ci "\\t") (fun _ -> '\t') in
+  let nt_f = pack (word_ci "\\f") (fun _ -> '\012') in
+  let nt_n = pack (word_ci "\\n") (fun _ ->'\n') in
+  let nt_r = pack (word_ci "\\r") (fun _ ->'\r') in
+  let nt = disj_list [nt_backslash; nt_quote; nt_tab; nt_f; nt_n; nt_r;] in
+  nt;; 
+ 
+
+(*any character other than backslash  or double qoute *)
+let nt_string_literal_char = pack (range '\032' '\255') (fun(ds) -> match ds with
+    | '\\' -> raise X_no_match
+    | '\"' -> raise X_no_match
+    | _ -> ds );;
+
+let nt_string_char = 
+  let nt = disj nt_string_literal_char nt_string_meta_chars in
+  nt;;
+
+let nt_string =
+    let nt_quote = char '\"' in
+    let nt_str = diff nt_any (one_of "\\\"") in
+    let nt_str = disj nt_str nt_string_meta_chars in
+    let nt_str = star nt_str in
+    let nt = caten nt_quote (caten nt_str nt_quote) in
+	nt;;
+
+
+
+(* 3.3.5 Char *)
+let nt_char_prefix = word "#\\";;
+
+let nt_nul = word_ci "nul";;
+let nt_newline = word_ci "newline";;
+let nt_return = word_ci "return";;
+let nt_tab = word_ci "tab";;
+let nt_page = word_ci "page";;
+let nt_space = word_ci "space";;
+
+let nt_null_to_char  = pack nt_nul (fun (ds) -> '\000');;
+let nt_newline_to_char  = pack nt_newline (fun (ds) -> '\010');;
+let nt_return_to_char  = pack nt_return (fun (ds) -> '\013');;
+let nt_tab_to_char  = pack nt_tab (fun (ds) -> '\009');; 
+let nt_page_to_char  = pack nt_page (fun (ds) -> '\012');;
+let nt_space_to_char  = pack nt_space (fun (ds) -> '\032');;
+
+let nt_named_char = disj_list [nt_null_to_char;nt_newline_to_char;nt_return_to_char;nt_space_to_char;nt_tab_to_char;nt_page_to_char];;
+
+let nt_named_chars = caten nt_char_prefix nt_named_char;;
+(*any charachter that greater than the space character in the ASCII table*)
+let nt_visible_char = caten nt_char_prefix (range '\032' '\255');;
+
+
+let nt_char  =
+  let test = disj nt_named_chars nt_visible_char in
+  pack test (fun (ds) -> match ds with
+      |(_,l) -> Char (l)
+    );;
+
+
+(*3.3.6 Nil*)
+let nt_nil =
+	let nt= caten tok_lparen tok_rparen in
+	(*TODO-add support in comments*)
+	(*let nt_nil_with_comments = *)
+    let nt = pack nt (fun _ -> Nil) in
+	nt;;
+	
+
+(*TODO*)
+(*3.3.7 Pair - List and dotted list*)
+(* List 
+let nt_list=
+	let nt=caten_list [tok_lparen;nt_sexsp;tok_rparen] in
+	let nt= 
+*)
 let ntSemicolon= char ';';; 
 (* Need to combine with other StringMetaChar *)
 let ntEndOfLine = char '\n';;
@@ -361,7 +355,8 @@ let rec list_to_pair l =
 		| [Nil] -> Pair(car,Nil)
 		| [] -> Pair(car,Nil)
 		| _ -> Pair(car, (list_to_pair cdr)) ;;
-		
+	
+	  
 (* parse the first sexpr and return the rest as char list *)
 let rec parse_One_Sexpr s = 
 		if s=[] then (Nil,[]) else
@@ -381,10 +376,7 @@ let rec parse_One_Sexpr s =
 	try let a,rest = parseNum s in
 		(a,rest)
 	with X_no_match -> 
-	(* Symbol *)
-	try let a,rest =  nt_symbol s in
-		(a,rest)
-	with X_no_match ->
+	
 	(* String *)
 	try let a,rest = getString s in
 		(String(list_to_string a),rest)
@@ -399,6 +391,7 @@ let rec parse_One_Sexpr s =
 	try let a,rest = tok_rparen s in
 		(Symbol(list_to_string [a]),rest) 
 	with X_no_match ->
+	
 	(* Line Comments *)
 	try let ls = parseLineComment s in
 		parse_One_Sexpr ls
@@ -407,9 +400,41 @@ let rec parse_One_Sexpr s =
 	try 
 		parse_QuoteLike s
 	with X_no_match ->
+	(*list*)
+	try
+		parse_list s
+	with X_no_match -> 
+	(* Symbol *)
+	try let a,rest =  nt_symbol s in
+		(a,rest)
+	with X_no_match ->
+	
 	let rest = parse_Sexpr_Comments s in
 		parse_One_Sexpr rest
+	
 
+	and parse_list s=
+	let rec make_proper_list = function
+      | [] -> Nil
+      | car::cdr -> Pair (car , make_proper_list cdr) in
+	 let rec make_improper_list = function
+      | [] -> Nil
+      | car::cdr::[] -> Pair (car, cdr)
+      | car::cdr -> Pair (car , make_improper_list cdr) in
+    let nt_DOT = caten nt_whitespaces (caten (char '.') nt_whitespaces) in
+	let nt_plus = caten nt_whitespaces parse_One_Sexpr in
+    let nt_plus = pack nt_plus (fun (_, sexpr) -> sexpr) in
+    let nt_plus = caten parse_One_Sexpr (star nt_plus) in
+    let nt_plus = pack nt_plus (fun (car, cdr) -> car::cdr) in
+	
+	let nt_list = caten tok_lparen (caten nt_plus tok_rparen) in
+	let nt_list = pack nt_list (fun (_, (sexprs, _)) -> make_proper_list sexprs) in
+    let nt_list = disj nt_nil nt_list in
+	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten nt_DOT (caten parse_One_Sexpr tok_lparen))) in
+    let nt_dotted_list = pack nt_dotted_list (fun (_, (sexprs, (_, (last_sexpr, _)))) -> make_improper_list (sexprs@[last_sexpr])) in
+    let nt = disj  nt_list nt_dotted_list  in
+	nt s
+	
 	(* 3.3.8 Quote-like forms *)
 	and parse_QuoteLike s = 
 		(*qoute*)
@@ -455,4 +480,3 @@ let rec parse_One_Sexpr s =
 let read_sexprs s = let p,_ = parse_Sexpr (string_to_list s) [] in
 	p;;
  end;; (* struct Reader *)
- 
