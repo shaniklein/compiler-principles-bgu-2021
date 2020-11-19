@@ -75,8 +75,26 @@ let tok_rparen = make_spaced ( char ')');;
 (* recognize dot with spaces*)
 let tok_dot = make_spaced (char '.');;
 
-(*3.3.3 Symbol*)
+(* 3.3.1 Boolean *)
+(* returns sexpr (of Bool ) * char list (of unparesd characters)
+		example: parseBool (string_to_list "#Tfg");; *)
 
+let parseBool s = 
+	let ntTrue = char_ci 't' 
+	and ntFalse = char_ci 'f'
+	and rest =  fun (_,r) -> r in
+	try let tst = rest (ntHashtag s) in
+		try let t = ntTrue ( tst) in
+			(Bool(true), rest(t)) 
+		with X_no_match -> 
+		try let f = ntFalse ( rest (ntHashtag s)) in
+			(Bool(false), rest(f)) 
+		with X_no_match -> nt_none()
+	with X_no_match -> nt_none();;
+
+
+
+(*3.3.3 Symbol*)
 (*As we saw in RS3 the range parser constructor takes two chars and returns a parser that accepts a single char in the given character range*)
 let nt_lower_case = range 'a' 'z';;
 (*As requested, Our parser convert all literal symbol characters to lowercase *)
@@ -122,18 +140,17 @@ let nt_symbol_char_no_dot =
 	nt;;
 		
  (*3.3.4 String*)
-(* String  *)
-
-let nt_string_meta_chars =
-  let nt_return = pack (word_ci "\\r") (fun _ ->'\r') in
-  let nt_newline = pack (word_ci "\\n") (fun _ ->'\n') in
-  let nt_tab = pack (word_ci "\\t") (fun _ -> '\t') in
-  let nt_f = pack (word_ci "\\f") (fun _ -> '\012') in
+  let nt_string_meta_chars =
   let nt_backslash = pack (word "\\\\") (fun _ -> '\\') in
   let nt_quote = pack (word "\\\"") (fun _ -> '"') in
-  let nt = disj_list [nt_return; nt_newline; nt_tab; nt_f; nt_backslash; nt_quote;] in
+  let nt_tab = pack (word_ci "\\t") (fun _ -> '\t') in
+  let nt_f = pack (word_ci "\\f") (fun _ -> '\012') in
+  let nt_n = pack (word_ci "\\n") (fun _ ->'\n') in
+  let nt_r = pack (word_ci "\\r") (fun _ ->'\r') in
+  let nt = disj_list [nt_backslash; nt_quote; nt_tab; nt_f; nt_n; nt_r;] in
   nt;; 
-	
+ 
+
 (*any character other than backslash  or double qoute *)
 let nt_string_literal_char = pack (range '\032' '\255') (fun(ds) -> match ds with
     | '\\' -> raise X_no_match
@@ -144,20 +161,18 @@ let nt_string_char =
   let nt = disj nt_string_literal_char nt_string_meta_chars in
   nt;;
 
-let nt_string = 	
+let nt_string =
+    let nt_quote = char '\"' in
+    let nt_str = diff nt_any (one_of "\\\"") in
+    let nt_str = disj nt_str nt_string_meta_chars in
+    let nt_str = star nt_str in
+    let nt = caten nt_quote (caten nt_str nt_quote) in
+	nt;;
+
+(*let nt_string = 	
 	let nt_quote= char '\"' in
 	let nt=  caten nt_quote (caten (star nt_string_char) nt_quote) in
-	nt;;
-	(*
-let nt_string = 	
-  let nt = caten_list [(pack (char '"') (fun(ds) -> [ds])) ; (star nt_string_char) ; (pack (char '"') (fun(ds) -> [ds]))]  in 
-  nt;;;;
-  in
-  let nt = pack nt (fun(ds) -> match ds with
-      | [a;b;c] -> b
-      | _ -> raise X_no_match) in
-  pack nt (fun(ds) -> String (list_to_string ds));;
-*)
+	nt;;*)
 
 (* 3.3.5 Char *)
 let nt_char_prefix = word "#\\";;
@@ -204,25 +219,6 @@ let nt_nil =
 (* List *)
 
 
-
-
-(* 3.3.1 Boolean *)
-
-(* returns sexpr (of Bool ) * char list (of unparesd characters)
-		example: parseBool (string_to_list "#Tfg");; *)
-
-let parseBool s = 
-	let ntTrue = char_ci 't' 
-	and ntFalse = char_ci 'f'
-	and rest =  fun (_,r) -> r in
-	try let tst = rest (ntHashtag s) in
-		try let t = ntTrue ( tst) in
-			(Bool(true), rest(t)) 
-		with X_no_match -> 
-		try let f = ntFalse ( rest (ntHashtag s)) in
-			(Bool(false), rest(f)) 
-		with X_no_match -> nt_none()
-	with X_no_match -> nt_none();;
 
 
 (* ------------------------ *)
@@ -456,12 +452,7 @@ let rec parse_One_Sexpr s =
 			parse_Sexpr rest (sexpr_ls@[one]) ;;
 		
 
-(* TODO: change this to read_sexprs in reader.ml *)
-
 let read_sexprs s = let p,_ = parse_Sexpr (string_to_list s) [] in
 	p;;
  end;; (* struct Reader *)
  
- 
-
-	
