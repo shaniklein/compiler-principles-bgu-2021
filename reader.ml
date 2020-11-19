@@ -318,13 +318,6 @@ let nt_nil =
 	nt;;
 	
 
-(*TODO*)
-(*3.3.7 Pair - List and dotted list*)
-(* List 
-let nt_list=
-	let nt=caten_list [tok_lparen;nt_sexsp;tok_rparen] in
-	let nt= 
-*)
 let ntSemicolon= char ';';; 
 (* Need to combine with other StringMetaChar *)
 let ntEndOfLine = char '\n';;
@@ -382,6 +375,7 @@ let rec parse_One_Sexpr s =
 		(String(list_to_string a),rest)
 		
 	with X_no_match ->
+	
 	(* ( *)
 	try let a,rest = tok_lparen s in
 		let p,rest = parse_Sexpr rest [] in
@@ -419,9 +413,10 @@ let rec parse_One_Sexpr s =
       | car::cdr -> Pair (car , make_proper_list cdr) in
 	 let rec make_improper_list = function
       | [] -> Nil
+	  (*in improper we know the last index*)
       | car::cdr::[] -> Pair (car, cdr)
       | car::cdr -> Pair (car , make_improper_list cdr) in
-    let nt_DOT = caten nt_whitespaces (caten (char '.') nt_whitespaces) in
+	  
 	let nt_plus = caten nt_whitespaces parse_One_Sexpr in
     let nt_plus = pack nt_plus (fun (_, sexpr) -> sexpr) in
     let nt_plus = caten parse_One_Sexpr (star nt_plus) in
@@ -430,7 +425,7 @@ let rec parse_One_Sexpr s =
 	let nt_list = caten tok_lparen (caten nt_plus tok_rparen) in
 	let nt_list = pack nt_list (fun (_, (sexprs, _)) -> make_proper_list sexprs) in
     let nt_list = disj nt_nil nt_list in
-	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten nt_DOT (caten parse_One_Sexpr tok_lparen))) in
+	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten parse_One_Sexpr tok_lparen))) in
     let nt_dotted_list = pack nt_dotted_list (fun (_, (sexprs, (_, (last_sexpr, _)))) -> make_improper_list (sexprs@[last_sexpr])) in
     let nt = disj  nt_list nt_dotted_list  in
 	nt s
