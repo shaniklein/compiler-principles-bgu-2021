@@ -385,6 +385,12 @@ let rec parse_One_Sexpr s =
 	try let ls = parseLineComment s in
 		parse_One_Sexpr ls
 	with X_no_match ->
+	
+		try let ls = parse_Sexpr_Comments s in
+		parse_One_Sexpr ls
+	with X_no_match ->
+	
+	
 	(* Quotes *)
 	try 
 		make_clean(parse_QuoteLike) s
