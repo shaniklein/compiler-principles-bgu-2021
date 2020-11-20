@@ -312,14 +312,11 @@ let nt_char  =
 (*3.3.6 Nil*)
 let nt_nil =
 	let nt= caten tok_lparen tok_rparen in
-	(*TODO-add support in comments*)
-	(*let nt_nil_with_comments = *)
     let nt = pack nt (fun _ -> Nil) in
 	nt;;
 	
 
 let ntSemicolon= char ';';; 
-(* Need to combine with other StringMetaChar *)
 let ntEndOfLine = char '\n';;
 
 (* 3.2.2 Line Comments *)
@@ -340,52 +337,33 @@ let getString s =
 	let _,(st,_) = r in
 	(st,ls);;
 
-(* convets list of sexper to nested Pair *)
-let rec list_to_pair l = 
-		let car = List.hd l and
-		cdr = List.tl l in
-		match cdr with
-		| [Nil] -> Pair(car,Nil)
-		| [] -> Pair(car,Nil)
-		| _ -> Pair(car, (list_to_pair cdr)) ;;
-	
 	  
 (* parse the first sexpr and return the rest as char list *)
 let rec parse_One_Sexpr s = 
-		if s=[] then (Nil,[]) else
+	if s=[] then ([],[]) else
 	(* white spaces *)
 	let w,rest = nt_whitespaces s in
 		if w != [] then 
 		parse_One_Sexpr rest
 		else
 	(* Bool *)
-	try let a,rest = parseBool s in
-		(a,rest)
+	let nt_bool = not_followed_by parseBool nt_symbol in
+	try let a,rest = nt_bool s in
+		([a],rest)
 	with X_no_match ->
 	try let a,rest = nt_char s in
-		(a,rest)
+		([a],rest)
 	with X_no_match ->
 	(* Number *)
-	try let a,rest = parseNum s in
-		(a,rest)
+	let nt_num = not_followed_by parseNum nt_symbol in
+	try let a,rest = nt_num s in
+		([a],rest)
 	with X_no_match -> 
-	
 	(* String *)
 	try let a,rest = getString s in
-		(String(list_to_string a),rest)
+		([String(list_to_string a)],rest)
 		
 	with X_no_match ->
-	
-	(* ( *)
-	try let a,rest = tok_lparen s in
-		let p,rest = parse_Sexpr rest [] in
-		(list_to_pair(p),rest)
-	with X_no_match ->
-	(* ) *)
-	try let a,rest = tok_rparen s in
-		(Symbol(list_to_string [a]),rest) 
-	with X_no_match ->
-	
 	(* Line Comments *)
 	try let ls = parseLineComment s in
 		parse_One_Sexpr ls
@@ -395,16 +373,17 @@ let rec parse_One_Sexpr s =
 		parse_QuoteLike s
 	with X_no_match ->
 	(*list*)
-	try
-		parse_list s
+	try let a,rest = parse_list s in
+		([a],rest)
 	with X_no_match -> 
 	(* Symbol *)
 	try let a,rest =  nt_symbol s in
-		(a,rest)
+		([a],rest)
 	with X_no_match ->
-	
+
 	let rest = parse_Sexpr_Comments s in
-		parse_One_Sexpr rest
+		([],rest)
+		(* parse_One_Sexpr rest *)
 	
 
 	and parse_list s=
@@ -416,17 +395,17 @@ let rec parse_One_Sexpr s =
 	  (*in improper we know the last index*)
       | car::cdr::[] -> Pair (car, cdr)
       | car::cdr -> Pair (car , make_improper_list cdr) in
-	  
+
 	let nt_plus = caten nt_whitespaces parse_One_Sexpr in
     let nt_plus = pack nt_plus (fun (_, sexpr) -> sexpr) in
     let nt_plus = caten parse_One_Sexpr (star nt_plus) in
     let nt_plus = pack nt_plus (fun (car, cdr) -> car::cdr) in
 	
 	let nt_list = caten tok_lparen (caten nt_plus tok_rparen) in
-	let nt_list = pack nt_list (fun (_, (sexprs, _)) -> make_proper_list sexprs) in
+	let nt_list = pack nt_list (fun (_, (sexprs, _)) -> make_proper_list (List.flatten sexprs)) in
     let nt_list = disj nt_nil nt_list in
-	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten parse_One_Sexpr tok_lparen))) in
-    let nt_dotted_list = pack nt_dotted_list (fun (_, (sexprs, (_, (last_sexpr, _)))) -> make_improper_list (sexprs@[last_sexpr])) in
+	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten parse_One_Sexpr tok_rparen))) in
+    let nt_dotted_list = pack nt_dotted_list (fun (_, (sexprs, (_, (last_sexpr, _)))) -> make_improper_list ((List.flatten sexprs)@last_sexpr)) in
     let nt = disj  nt_list nt_dotted_list  in
 	nt s
 	
@@ -435,22 +414,26 @@ let rec parse_One_Sexpr s =
 		(*qoute*)
 		try let _,ls = nt_Quoted s in
 			let p,rest = parse_One_Sexpr ls in
-			(Pair(Symbol("qoute"),Pair(p,Nil)),rest)
+			let p= List.hd p in
+			([Pair(Symbol("quote"),Pair(p,Nil))],rest)
 		with X_no_match -> 
 		(*quasiqoute*)
 		try let _,ls = nt_QQuoted s in
 			let p,rest = parse_One_Sexpr ls in
-			(Pair(Symbol("quasiqoute"),Pair(p,Nil)),rest)
+			let p= List.hd p in
+			([Pair(Symbol("quasiquote"),Pair(p,Nil))],rest)
 		with X_no_match -> 
 		(*unquote-splicing*)
 		try let _,ls = nt_UnquotedSpliced s in
 			let p,rest = parse_One_Sexpr ls in
-			(Pair(Symbol("unquote-splicing"),Pair(p,Nil)),rest)
+			let p= List.hd p in
+			([Pair(Symbol("unquote-splicing"),Pair(p,Nil))],rest)
 		with X_no_match ->
 		(*unquote*)
 		try let _,ls = nt_Unquoted s in
 			let p,rest = parse_One_Sexpr ls in
-			(Pair(Symbol("unquote"),Pair(p,Nil)),rest)
+			let p= List.hd p in
+			([Pair(Symbol("unquote"),Pair(p,Nil))],rest)
 		with X_no_match ->
 		nt_none() 
 
@@ -468,10 +451,12 @@ let rec parse_One_Sexpr s =
 	and parse_Sexpr s sexpr_ls= 
 		if s=[] then (sexpr_ls,[]) else
 		let one,rest = parse_One_Sexpr s in
-			if one=Symbol(")") then (sexpr_ls,rest) else
-			parse_Sexpr rest (sexpr_ls@[one]) ;;
+			parse_Sexpr rest (sexpr_ls@one) ;;
 		
 
 let read_sexprs s = let p,_ = parse_Sexpr (string_to_list s) [] in
 	p;;
+
+
+
  end;; (* struct Reader *)
