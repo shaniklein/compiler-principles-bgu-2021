@@ -334,7 +334,8 @@ let ntEndOfLine = char '\n';;
 (* 3.2.2 Line Comments *)
 let rec skipComment s = 
 	if s=[] then [] else
-	try let _,ls = ntEndOfLine s in
+	let eol = disj nt_named_char ntEndOfLine in
+	try let _,ls = eol s in
 		ls
 	with X_no_match -> (skipComment (List.tl s));;
 
@@ -364,6 +365,7 @@ let rec parse_One_Sexpr s =
 	try let a,rest = nt_bool s in
 		([a],rest)
 	with X_no_match ->
+	(* Char *)
 	try let a,rest = make_clean(nt_char) s in
 		([a],rest)
 	with X_no_match ->
@@ -396,7 +398,6 @@ let rec parse_One_Sexpr s =
 
 	let rest =  parse_Sexpr_Comments s in
 		([],rest)
-		(* parse_One_Sexpr rest *)
 	
 
 	and parse_list s=
@@ -424,27 +425,35 @@ let rec parse_One_Sexpr s =
 	
 	(* 3.3.8 Quote-like forms *)
 	and parse_QuoteLike s = 
+		let check_empty = fun (p, rest) ->
+				match p with 
+				| []-> parse_One_Sexpr rest
+				| _-> (p,rest) in
 		(*qoute*)
 		try let _,ls = nt_Quoted s in
 			let p,rest = parse_One_Sexpr ls in
+			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
-			([Pair(Symbol("quote"),Pair(p,Nil))],rest)
+				([Pair(Symbol("quote"),Pair(p,Nil))],rest)
 		with X_no_match -> 
 		(*quasiqoute*)
 		try let _,ls = nt_QQuoted s in
 			let p,rest = parse_One_Sexpr ls in
+			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
 			([Pair(Symbol("quasiquote"),Pair(p,Nil))],rest)
 		with X_no_match -> 
 		(*unquote-splicing*)
 		try let _,ls = nt_UnquotedSpliced s in
 			let p,rest = parse_One_Sexpr ls in
+			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
 			([Pair(Symbol("unquote-splicing"),Pair(p,Nil))],rest)
 		with X_no_match ->
 		(*unquote*)
 		try let _,ls = nt_Unquoted s in
 			let p,rest = parse_One_Sexpr ls in
+			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
 			([Pair(Symbol("unquote"),Pair(p,Nil))],rest)
 		with X_no_match ->
