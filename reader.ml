@@ -75,6 +75,18 @@ let tok_rparen = make_spaced ( char ')');;
 (* recognize dot with spaces*)
 let tok_dot = make_spaced (char '.');;
 
+let nt_char_to_ignore =
+  let nt_tab = char '\t' in
+  let nt_f = char '\012' in
+  let nt_n = char '\n' in
+  let nt_r = char '\r' in
+  let nt = disj_list [nt_whitespace;nt_tab; nt_f; nt_n; nt_r;] in
+  nt;; 
+ 
+ let nt_chars_to_ignore =star nt_char_to_ignore;;
+ let make_clean nt = make_paired nt_chars_to_ignore nt_chars_to_ignore nt;;
+
+
 (* 3.3.1 Boolean *)
 (* returns sexpr (of Bool ) * char list (of unparesd characters)
 		example: parseBool (string_to_list "#Tfg");; *)
@@ -337,30 +349,31 @@ let getString s =
 	let _,(st,_) = r in
 	(st,ls);;
 
+
 	  
 (* parse the first sexpr and return the rest as char list *)
 let rec parse_One_Sexpr s = 
 	if s=[] then ([],[]) else
 	(* white spaces *)
-	let w,rest = nt_whitespaces s in
+	let w,rest = nt_chars_to_ignore s in
 		if w != [] then 
 		parse_One_Sexpr rest
 		else
 	(* Bool *)
-	let nt_bool = not_followed_by parseBool nt_symbol in
+	let nt_bool = make_clean (not_followed_by parseBool nt_symbol) in
 	try let a,rest = nt_bool s in
 		([a],rest)
 	with X_no_match ->
-	try let a,rest = nt_char s in
+	try let a,rest = make_clean(nt_char) s in
 		([a],rest)
 	with X_no_match ->
 	(* Number *)
-	let nt_num = not_followed_by parseNum nt_symbol in
+	let nt_num = make_clean(not_followed_by parseNum nt_symbol) in
 	try let a,rest = nt_num s in
 		([a],rest)
 	with X_no_match -> 
 	(* String *)
-	try let a,rest = getString s in
+	try let a,rest =make_clean( getString) s in
 		([String(list_to_string a)],rest)
 		
 	with X_no_match ->
@@ -370,18 +383,18 @@ let rec parse_One_Sexpr s =
 	with X_no_match ->
 	(* Quotes *)
 	try 
-		parse_QuoteLike s
+		make_clean(parse_QuoteLike) s
 	with X_no_match ->
 	(*list*)
 	try let a,rest = parse_list s in
 		([a],rest)
 	with X_no_match -> 
 	(* Symbol *)
-	try let a,rest =  nt_symbol s in
+	try let a,rest =  make_clean(nt_symbol) s in
 		([a],rest)
 	with X_no_match ->
 
-	let rest = parse_Sexpr_Comments s in
+	let rest =  parse_Sexpr_Comments s in
 		([],rest)
 		(* parse_One_Sexpr rest *)
 	
@@ -460,3 +473,4 @@ let read_sexprs s = let p,_ = parse_Sexpr (string_to_list s) [] in
 
 
  end;; (* struct Reader *)
+ 
