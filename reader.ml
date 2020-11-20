@@ -67,14 +67,6 @@ let nt = caten nt nt_right in
 let nt = pack nt (function (e, _) -> e) in
   nt;;
 
-
-let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
-let tok_lparen = make_spaced ( char '(');;
-let tok_rparen = make_spaced ( char ')');; 
-(*end of code from RS3*)
-(* recognize dot with spaces*)
-let tok_dot = make_spaced (char '.');;
-
 let nt_char_to_ignore =
   let nt_tab = char '\t' in
   let nt_f = char '\012' in
@@ -85,6 +77,15 @@ let nt_char_to_ignore =
  
  let nt_chars_to_ignore =star nt_char_to_ignore;;
  let make_clean nt = make_paired nt_chars_to_ignore nt_chars_to_ignore nt;;
+
+
+let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
+let tok_lparen = make_clean ( char '(');;
+let tok_rparen = make_clean ( char ')');; 
+(*end of code from RS3*)
+(* recognize dot with spaces*)
+let tok_dot = make_clean (char '.');;
+
 
 
 (* 3.3.1 Boolean *)
@@ -409,8 +410,8 @@ let rec parse_One_Sexpr s =
 	  (*in improper we know the last index*)
       | car::cdr::[] -> Pair (car, cdr)
       | car::cdr -> Pair (car , make_improper_list cdr) in
-
-	let nt_plus = caten nt_whitespaces parse_One_Sexpr in
+	
+	let nt_plus = caten nt_whitespaces parse_One_Sexpr  in
     let nt_plus = pack nt_plus (fun (_, sexpr) -> sexpr) in
     let nt_plus = caten parse_One_Sexpr (star nt_plus) in
     let nt_plus = pack nt_plus (fun (car, cdr) -> car::cdr) in
@@ -421,6 +422,7 @@ let rec parse_One_Sexpr s =
 	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten parse_One_Sexpr tok_rparen))) in
     let nt_dotted_list = pack nt_dotted_list (fun (_, (sexprs, (_, (last_sexpr, _)))) -> make_improper_list ((List.flatten sexprs)@last_sexpr)) in
     let nt = disj  nt_list nt_dotted_list  in
+	let nt=make_clean nt in
 	nt s
 	
 	(* 3.3.8 Quote-like forms *)
