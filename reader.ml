@@ -67,14 +67,6 @@ let nt = caten nt nt_right in
 let nt = pack nt (function (e, _) -> e) in
   nt;;
 
-
-let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
-let tok_lparen = make_spaced ( char '(');;
-let tok_rparen = make_spaced ( char ')');; 
-(*end of code from RS3*)
-(* recognize dot with spaces*)
-let tok_dot = make_spaced (char '.');;
-
 let nt_char_to_ignore =
   let nt_tab = char '\t' in
   let nt_f = char '\012' in
@@ -85,6 +77,16 @@ let nt_char_to_ignore =
  
  let nt_chars_to_ignore =star nt_char_to_ignore;;
  let make_clean nt = make_paired nt_chars_to_ignore nt_chars_to_ignore nt;;
+
+let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
+let tok_lparen = make_clean ( char '(');;
+let tok_rparen = make_clean ( char ')');; 
+(*end of code from RS3*)
+(* recognize dot with spaces*)
+let tok_dot = make_clean (char '.');;
+
+
+
 
 
 (* 3.3.1 Boolean *)
@@ -396,9 +398,14 @@ let rec parse_One_Sexpr s =
 		([a],rest)
 	with X_no_match ->
 
-	let rest =  parse_Sexpr_Comments s in
+	try let rest =  parse_Sexpr_Comments s in
 		([],rest)
-	
+	with X_no_match ->
+
+		(* Line Comments *)
+	let ls = parseLineComment s in
+		(*parse_One_Sexpr ls*)	
+		([],ls)
 
 	and parse_list s=
 	let rec make_proper_list = function
@@ -410,10 +417,12 @@ let rec parse_One_Sexpr s =
       | car::cdr::[] -> Pair (car, cdr)
       | car::cdr -> Pair (car , make_improper_list cdr) in
 
-	let nt_plus = caten nt_whitespaces parse_One_Sexpr in
+
+	let nt_plus = caten nt_chars_to_ignore parse_One_Sexpr in
     let nt_plus = pack nt_plus (fun (_, sexpr) -> sexpr) in
     let nt_plus = caten parse_One_Sexpr (star nt_plus) in
     let nt_plus = pack nt_plus (fun (car, cdr) -> car::cdr) in
+	
 	
 	let nt_list = caten tok_lparen (caten nt_plus tok_rparen) in
 	let nt_list = pack nt_list (fun (_, (sexprs, _)) -> make_proper_list (List.flatten sexprs)) in
