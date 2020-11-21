@@ -1,5 +1,5 @@
-Shani - 205781909	
-Raz- 206120206
+Shani Klein- 205781909	
+Raz Paul- 206120206
 
 We assert that the work we submitted is 100% our own. We have not received any
 part from any other student in the class, nor have we give parts of it for use to others.
