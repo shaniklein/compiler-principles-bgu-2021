@@ -343,7 +343,7 @@ let rec skipComment s =
 
 let parseLineComment s = 
 	let _,ls = ntSemicolon s in
-	skipComment ls;;
+	([], (skipComment ls));;
 
 
 (* return the string part from parser *)
@@ -379,18 +379,7 @@ let rec parse_One_Sexpr s =
 	(* String *)
 	try let a,rest =make_clean( getString) s in
 		([String(list_to_string a)],rest)
-		
 	with X_no_match ->
-	(* Line Comments *)
-	try let ls = parseLineComment s in
-		parse_One_Sexpr ls
-	with X_no_match ->
-	
-		try let ls = parse_Sexpr_Comments s in
-		parse_One_Sexpr ls
-	with X_no_match ->
-	
-	
 	(* Quotes *)
 	try 
 		make_clean(parse_QuoteLike) s
@@ -402,16 +391,17 @@ let rec parse_One_Sexpr s =
 	(* Symbol *)
 	try let a,rest =  make_clean(nt_symbol) s in
 		([a],rest)
+	with X_no_match -> 
+	(* Sexpr Comments *)
+	try let a,rest =  parse_Sexpr_Comments s in
+		(a,rest)
 	with X_no_match ->
-
-	try let rest =  parse_Sexpr_Comments s in
-		([],rest)
-	with X_no_match ->
-
-		(* Line Comments *)
-	let ls = parseLineComment s in
-		(*parse_One_Sexpr ls*)	
-		([],ls)
+	(* Line Comments *)
+	let a,ls = parseLineComment s in	
+		(a,ls)
+	(* let a,ls = parse_comments s in	
+		(a,ls)
+	 *)
 
 	and parse_list s=
 	let rec make_proper_list = function
@@ -433,7 +423,7 @@ let rec parse_One_Sexpr s =
 	let nt_list = caten tok_lparen (caten nt_plus tok_rparen) in
 	let nt_list = pack nt_list (fun (_, (sexprs, _)) -> make_proper_list (List.flatten sexprs)) in
     let nt_list = disj nt_nil nt_list in
-	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten parse_One_Sexpr tok_rparen))) in
+	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten one_with_comment tok_rparen))) in
     let nt_dotted_list = pack nt_dotted_list (fun (_, (sexprs, (_, (last_sexpr, _)))) -> make_improper_list ((List.flatten sexprs)@last_sexpr)) in
     let nt = disj  nt_list nt_dotted_list  in
 	nt s
@@ -442,32 +432,32 @@ let rec parse_One_Sexpr s =
 	and parse_QuoteLike s = 
 		let check_empty = fun (p, rest) ->
 				match p with 
-				| []-> parse_One_Sexpr rest
+				| []-> one_with_comment rest
 				| _-> (p,rest) in
 		(*qoute*)
 		try let _,ls = nt_Quoted s in
-			let p,rest = parse_One_Sexpr ls in
+			let p,rest = one_with_comment ls in
 			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
 				([Pair(Symbol("quote"),Pair(p,Nil))],rest)
 		with X_no_match -> 
 		(*quasiqoute*)
 		try let _,ls = nt_QQuoted s in
-			let p,rest = parse_One_Sexpr ls in
+			let p,rest = one_with_comment ls in
 			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
 			([Pair(Symbol("quasiquote"),Pair(p,Nil))],rest)
 		with X_no_match -> 
 		(*unquote-splicing*)
 		try let _,ls = nt_UnquotedSpliced s in
-			let p,rest = parse_One_Sexpr ls in
+			let p,rest = one_with_comment ls in
 			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
 			([Pair(Symbol("unquote-splicing"),Pair(p,Nil))],rest)
 		with X_no_match ->
 		(*unquote*)
 		try let _,ls = nt_Unquoted s in
-			let p,rest = parse_One_Sexpr ls in
+			let p,rest = one_with_comment ls in
 			let p,rest = check_empty (p, rest) in
 			let p= List.hd p in
 			([Pair(Symbol("unquote"),Pair(p,Nil))],rest)
@@ -480,7 +470,18 @@ let rec parse_One_Sexpr s =
 	and parse_Sexpr_Comments s = 
 		let _, ls = nt_Sexpr_Comment s in
 		let one,rest = parse_One_Sexpr ls in 
-		rest
+		([],rest)
+
+	and parse_comments s = 
+		let nt_owc1 = caten nt_whitespaces (caten (star parse_Sexpr_Comments) (caten nt_whitespaces (star parseLineComment ) ))  in
+		let nt_owc2 = caten nt_whitespaces (caten (star parseLineComment) (caten nt_whitespaces (star parse_Sexpr_Comments ) ))  in
+		let nt_owc = caten nt_owc1 nt_owc2 in
+		let _,rest = nt_owc s in 
+		([],rest)
+
+	and one_with_comment s= 
+		let f = fun ((sexprs, _),rest)->(sexprs,rest) in 
+		f (caten parse_One_Sexpr parse_comments s)
 
 	(* parse all sexprs 
 		s 		- char list
@@ -496,5 +497,6 @@ let read_sexprs s = let p,_ = parse_Sexpr (string_to_list s) [] in
 
 
 
- end;; (* struct Reader *)
- 
+
+
+end;; (* struct Reader *)
