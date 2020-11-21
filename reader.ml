@@ -399,9 +399,7 @@ let rec parse_One_Sexpr s =
 	(* Line Comments *)
 	let a,ls = parseLineComment s in	
 		(a,ls)
-	(* let a,ls = parse_comments s in	
-		(a,ls)
-	 *)
+
 
 	and parse_list s=
 	let rec make_proper_list = function
@@ -468,9 +466,14 @@ let rec parse_One_Sexpr s =
 	(* 3.2.3 Sexpr Comments *)
 	(* TODO: make sure its VALID sexpr. it works now on any sexpr *)
 	and parse_Sexpr_Comments s = 
-		let _, ls = nt_Sexpr_Comment s in
+		let a, ls = nt_Sexpr_Comment s in
 		let one,rest = parse_One_Sexpr ls in 
-		([],rest)
+		if one = [] then
+		let ls = ['#';';']@rest in
+		let a,ls = parse_Sexpr_Comments ls in 
+			([],ls)
+		else
+			([],rest)
 
 	and parse_comments s = 
 		let nt_owc1 = caten nt_whitespaces (caten (star parse_Sexpr_Comments) (caten nt_whitespaces (star parseLineComment ) ))  in
