@@ -1,14 +1,5 @@
-diff --git a/README.md b/README.md
-deleted file mode 100644
-index 9033096..0000000
---- a/README.md
-+++ /dev/null
-@@ -1,3 +0,0 @@
--# comp211
--
--Tess
 diff --git a/reader.ml b/reader.ml
-index 0989017..d8041a6 100644
+index 32445c2..1859492 100644
 --- a/reader.ml
 +++ b/reader.ml
 @@ -1,5 +1,6 @@
@@ -18,19 +9,7 @@ index 0989017..d8041a6 100644
  
  exception X_not_yet_implemented;;
  exception X_this_should_not_happen;;
-@@ -26,8 +27,9 @@ let rec sexpr_eq s1 s2 =
-   | Char(c1), Char(c2) -> c1 = c2
-   | String(s1), String(s2) -> s1 = s2
-   | Symbol(s1), Symbol(s2) -> s1 = s2
--  | Pair(car1, cdr1), Pair(car2, cdr2) -> (sexpr_eq car1 car2) && (sexpr_eq cdr1 cdr2);;
--  
-+  | Pair(car1, cdr1), Pair(car2, cdr2) -> (sexpr_eq car1 car2) && (sexpr_eq cdr1 cdr2)
-+  | _ -> false;;
-+
- module Reader: sig
-   val read_sexprs : string -> sexpr list
- end
-@@ -35,11 +37,466 @@ end
+@@ -36,11 +37,440 @@ end
  let normalize_scheme_symbol str =
    let s = string_to_list str in
    if (andmap
@@ -46,7 +25,8 @@ index 0989017..d8041a6 100644
 +let ntHashtag = char '#';;
 +let ntSlash = char '/';;
 +let ntDot = char '.';;
-+
+ 
+-let read_sexprs string = raise X_not_yet_implemented;;
 +let digit = range '0' '9';;
 +let digitSeq = plus digit;;
 +
@@ -66,6 +46,14 @@ index 0989017..d8041a6 100644
 +let nt = pack nt (function (e, _) -> e) in
 +  nt;;
 +
++
++let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
++let tok_lparen = make_spaced ( char '(');;
++let tok_rparen = make_spaced ( char ')');; 
++(*end of code from RS3*)
++(* recognize dot with spaces*)
++let tok_dot = make_spaced (char '.');;
++
 +let nt_char_to_ignore =
 +  let nt_tab = char '\t' in
 +  let nt_f = char '\012' in
@@ -76,16 +64,6 @@ index 0989017..d8041a6 100644
 + 
 + let nt_chars_to_ignore =star nt_char_to_ignore;;
 + let make_clean nt = make_paired nt_chars_to_ignore nt_chars_to_ignore nt;;
-+
-+let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
-+let tok_lparen = make_clean ( char '(');;
-+let tok_rparen = make_clean ( char ')');; 
-+(*end of code from RS3*)
-+(* recognize dot with spaces*)
-+let tok_dot = make_clean (char '.');;
-+
-+
-+
 +
 +
 +(* 3.3.1 Boolean *)
@@ -118,8 +96,7 @@ index 0989017..d8041a6 100644
 +		pack d extractSign s;
 +	with X_no_match -> (1,s)
 +
- 
--let read_sexprs string = raise X_not_yet_implemented;;
++
 +(* convert char of int to int *)
 +let char_to_int c = 
 +	int_of_char c - int_of_char '0';;
@@ -244,11 +221,12 @@ index 0989017..d8041a6 100644
 +let nt_symbol_char_no_dot =    
 +  let nt = disj_list [nt_lower_case;nt_upper_case;digits ; nt_special_char; ] in
 +  nt;;
-   
++  
 +  let nt_symbol_char=
 +	let nt=disj_list[nt_symbol_char_no_dot ;nt_dot ] in
 +  nt;;
-+  
+   
+-end;; (* struct Reader *)
 +	let nt_symbol_char_with_dot=
 +		let nt=caten nt_symbol_char (plus nt_symbol_char) in
 +		let nt=pack nt (fun (a,b)->list_to_string(a::b)) in
@@ -336,14 +314,13 @@ index 0989017..d8041a6 100644
 +(* 3.2.2 Line Comments *)
 +let rec skipComment s = 
 +	if s=[] then [] else
-+	let eol = disj nt_named_char ntEndOfLine in
-+	try let _,ls = eol s in
++	try let _,ls = ntEndOfLine s in
 +		ls
 +	with X_no_match -> (skipComment (List.tl s));;
 +
 +let parseLineComment s = 
 +	let _,ls = ntSemicolon s in
-+	([], (skipComment ls));;
++	skipComment ls;;
 +
 +
 +(* return the string part from parser *)
@@ -367,7 +344,6 @@ index 0989017..d8041a6 100644
 +	try let a,rest = nt_bool s in
 +		([a],rest)
 +	with X_no_match ->
-+	(* Char *)
 +	try let a,rest = make_clean(nt_char) s in
 +		([a],rest)
 +	with X_no_match ->
@@ -379,6 +355,11 @@ index 0989017..d8041a6 100644
 +	(* String *)
 +	try let a,rest =make_clean( getString) s in
 +		([String(list_to_string a)],rest)
++		
++	with X_no_match ->
++	(* Line Comments *)
++	try let ls = parseLineComment s in
++		parse_One_Sexpr ls
 +	with X_no_match ->
 +	(* Quotes *)
 +	try 
@@ -391,17 +372,12 @@ index 0989017..d8041a6 100644
 +	(* Symbol *)
 +	try let a,rest =  make_clean(nt_symbol) s in
 +		([a],rest)
-+	with X_no_match -> 
-+	(* Sexpr Comments *)
-+	try let a,rest =  parse_Sexpr_Comments s in
-+		(a,rest)
 +	with X_no_match ->
-+	(* Line Comments *)
-+	let a,ls = parseLineComment s in	
-+		(a,ls)
-+	(* let a,ls = parse_comments s in	
-+		(a,ls)
-+	 *)
++
++	let rest =  parse_Sexpr_Comments s in
++		([],rest)
++		(* parse_One_Sexpr rest *)
++	
 +
 +	and parse_list s=
 +	let rec make_proper_list = function
@@ -413,52 +389,42 @@ index 0989017..d8041a6 100644
 +      | car::cdr::[] -> Pair (car, cdr)
 +      | car::cdr -> Pair (car , make_improper_list cdr) in
 +
-+
-+	let nt_plus = caten nt_chars_to_ignore parse_One_Sexpr in
++	let nt_plus = caten nt_whitespaces parse_One_Sexpr in
 +    let nt_plus = pack nt_plus (fun (_, sexpr) -> sexpr) in
 +    let nt_plus = caten parse_One_Sexpr (star nt_plus) in
 +    let nt_plus = pack nt_plus (fun (car, cdr) -> car::cdr) in
 +	
-+	
 +	let nt_list = caten tok_lparen (caten nt_plus tok_rparen) in
 +	let nt_list = pack nt_list (fun (_, (sexprs, _)) -> make_proper_list (List.flatten sexprs)) in
 +    let nt_list = disj nt_nil nt_list in
-+	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten one_with_comment tok_rparen))) in
++	let nt_dotted_list = caten tok_lparen (caten nt_plus  (caten tok_dot (caten parse_One_Sexpr tok_rparen))) in
 +    let nt_dotted_list = pack nt_dotted_list (fun (_, (sexprs, (_, (last_sexpr, _)))) -> make_improper_list ((List.flatten sexprs)@last_sexpr)) in
 +    let nt = disj  nt_list nt_dotted_list  in
 +	nt s
 +	
 +	(* 3.3.8 Quote-like forms *)
 +	and parse_QuoteLike s = 
-+		let check_empty = fun (p, rest) ->
-+				match p with 
-+				| []-> one_with_comment rest
-+				| _-> (p,rest) in
 +		(*qoute*)
 +		try let _,ls = nt_Quoted s in
-+			let p,rest = one_with_comment ls in
-+			let p,rest = check_empty (p, rest) in
++			let p,rest = parse_One_Sexpr ls in
 +			let p= List.hd p in
-+				([Pair(Symbol("quote"),Pair(p,Nil))],rest)
++			([Pair(Symbol("quote"),Pair(p,Nil))],rest)
 +		with X_no_match -> 
 +		(*quasiqoute*)
 +		try let _,ls = nt_QQuoted s in
-+			let p,rest = one_with_comment ls in
-+			let p,rest = check_empty (p, rest) in
++			let p,rest = parse_One_Sexpr ls in
 +			let p= List.hd p in
 +			([Pair(Symbol("quasiquote"),Pair(p,Nil))],rest)
 +		with X_no_match -> 
 +		(*unquote-splicing*)
 +		try let _,ls = nt_UnquotedSpliced s in
-+			let p,rest = one_with_comment ls in
-+			let p,rest = check_empty (p, rest) in
++			let p,rest = parse_One_Sexpr ls in
 +			let p= List.hd p in
 +			([Pair(Symbol("unquote-splicing"),Pair(p,Nil))],rest)
 +		with X_no_match ->
 +		(*unquote*)
 +		try let _,ls = nt_Unquoted s in
-+			let p,rest = one_with_comment ls in
-+			let p,rest = check_empty (p, rest) in
++			let p,rest = parse_One_Sexpr ls in
 +			let p= List.hd p in
 +			([Pair(Symbol("unquote"),Pair(p,Nil))],rest)
 +		with X_no_match ->
@@ -470,18 +436,7 @@ index 0989017..d8041a6 100644
 +	and parse_Sexpr_Comments s = 
 +		let _, ls = nt_Sexpr_Comment s in
 +		let one,rest = parse_One_Sexpr ls in 
-+		([],rest)
-+
-+	and parse_comments s = 
-+		let nt_owc1 = caten nt_whitespaces (caten (star parse_Sexpr_Comments) (caten nt_whitespaces (star parseLineComment ) ))  in
-+		let nt_owc2 = caten nt_whitespaces (caten (star parseLineComment) (caten nt_whitespaces (star parse_Sexpr_Comments ) ))  in
-+		let nt_owc = caten nt_owc1 nt_owc2 in
-+		let _,rest = nt_owc s in 
-+		([],rest)
-+
-+	and one_with_comment s= 
-+		let f = fun ((sexprs, _),rest)->(sexprs,rest) in 
-+		f (caten parse_One_Sexpr parse_comments s)
++		rest
 +
 +	(* parse all sexprs 
 +		s 		- char list
@@ -497,16 +452,16 @@ index 0989017..d8041a6 100644
 +
 +
 +
-+
-+
- end;; (* struct Reader *)
++ end;; (* struct Reader *)
++ 
+\ No newline at end of file
 diff --git a/readme.txt b/readme.txt
-index e69de29..021a572 100644
+index e69de29..5df7830 100644
 --- a/readme.txt
 +++ b/readme.txt
 @@ -0,0 +1,10 @@
-+Shani Klein- 205781909	
-+Raz Paul- 206120206
++Shani - 205781909	
++Raz- 206120206
 +
 +We assert that the work we submitted is 100% our own. We have not received any
 +part from any other student in the class, nor have we give parts of it for use to others.

@@ -1,0 +1,1 @@
+[Pair (Pair (Symbol "a", Pair (Symbol "b", Pair (Symbol "c", Nil))),Pair (Symbol "d", Pair (Pair (Symbol "e", Symbol "f"), Symbol "g")))]

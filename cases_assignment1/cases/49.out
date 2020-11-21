@@ -1,0 +1,1 @@
+[TaggedSexpr ("foo",Pair (Number (Int 2),Pair (Number (Int 3),Pair(Pair (Number (Int 2),Pair (Number (Int 3),Pair (Pair (Number (Int 1), Pair (TagRef "foo", Nil)), Nil))),Nil))))]

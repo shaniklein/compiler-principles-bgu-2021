@@ -1,0 +1,1 @@
+[TaggedSexpr ("a",Pair (Number (Int 1),Pair (Number (Float 2.3),Pair (Number (Float 0.01),Pair (Bool true,Pair (Pair (Symbol "unquote", Pair (Bool false, Nil)),Pair(Pair (Symbol "unquote-splicing",Pair (Pair (Symbol "a", Number (Int 1295)), Nil)),Pair (TagRef "b", Nil))))))))]
