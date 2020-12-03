@@ -153,9 +153,7 @@ let mantissa s =
 
 (* Naturals parser *)
 let parseNat s = 
-	let sign,ls = ntSign s in
-	let numLst, ls =  digitSeq ls in
-	(sign * (nat numLst),ls);;
+	pack digitSeq nat s ;;
 
 (* Mantissa parser *)
 let parseMantissa ls = 
@@ -175,7 +173,9 @@ let gcd a b =
 let parseScientific s = 
 	let ntE = char_ci 'e' in
 	let _,ls = ntE s in
-	parseNat ls ;;
+	let sign, num = ntSign ls in
+	let num, ls = parseNat num in
+	(sign*num,ls) ;;
 
 (* float*int->float
 	return nEe *)
@@ -187,17 +187,19 @@ let rec raiseExp n e =
 (* returns sexpr (of Number ) * char list (of unparesd characters)
 		example: parseNum (string_to_list "+0034.0100");; *)
 let parseNum s = 
-	let n1,ls = parseNat s in
+	let sign,num = ntSign s in
+	let n1,ls = parseNat num in
 	(* fraction *)
 	try let _, ls = ntSlash ls in
 		let n2,ls = parseNat ls in
 		let gcdNum = gcd n1 n2 in
-		(Number(Fraction (n1/gcdNum,n2/gcdNum)) , ls)
+		(Number(Fraction (sign*n1/gcdNum,n2/gcdNum)) , ls)
 	with X_no_match ->
 	(* float *)
 	try let _, ls = ntDot ls in
 		let n2,ls = parseMantissa ls in
-		let fltNum = if n1>0 then (float_of_int n1) +. n2 else (float_of_int n1) -. n2 in
+		let fltNum = if n1>=0 then (float_of_int n1) +. n2 else (float_of_int n1) -. n2 in
+		let fltNum = fltNum *. float(sign) in
 		(* scientific float *)
 		try let e,ls = parseScientific ls in
 			let exp = raiseExp fltNum e in
@@ -208,10 +210,10 @@ let parseNum s =
 	(* scientific int *)
 	try let e,ls = parseScientific ls in
 		let exp = raiseExp (float(n1)) e in
-		(Number(Float(exp)), ls)
+		(Number(Float(float(sign)*.exp)), ls)
 	with X_no_match ->
 	(* int as fraction*)
-	(Number(Fraction (n1,1)),ls);;
+	(Number(Fraction (sign*n1,1)),ls);;
 	
 
 (*3.3.3 Symbol*)
@@ -483,7 +485,8 @@ let rec parse_One_Sexpr s =
 
 	and one_with_comment s= 
 		let f = fun ((sexprs, _),rest)->(sexprs,rest) in 
-		f (caten parse_One_Sexpr parse_comments s)
+		let _,first_com = parse_comments s in
+		f (caten parse_One_Sexpr parse_comments first_com)
 
 	(* parse all sexprs 
 		s 		- char list
