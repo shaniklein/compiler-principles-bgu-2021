@@ -73,7 +73,7 @@ let selfEval sexpr =
 let constQuote sexpr = 
    match sexpr with
   | Pair(Symbol("quote"),Pair(exp,Nil)) -> Const(Sexpr(exp))
-  | _ -> nt_none()
+  | _ -> nt_none() 
 
 let tag_const sexpr = 
   disj selfEval constQuote sexpr;;
@@ -155,6 +155,24 @@ let rec list_to_pair ls =
   if ls = [] then Nil else
   Pair((List.hd ls), (list_to_pair (List.tl ls)));;
 
+let rec pair_to_list p =
+  match p with
+  | Pair(a,b) -> a::(pair_to_list b)
+  | Nil -> []
+  | _-> raise X_syntax_error;;
+
+  let is_var expr =
+  match expr with
+  | Var(_) -> true
+  | _ -> false
+
+  let rec drop_seq l =
+    match l with
+    | [] -> []
+    | Seq(s)  :: tl -> drop_seq ((List.hd s)::List.tl s)
+    | hd :: tl -> hd :: drop_seq tl;;
+
+
 let rec let_to_lambda sexpr =
   match sexpr with
   | Pair(defs,body)->
@@ -172,22 +190,33 @@ let rec rec_tag_parser sexprs exprs =
   match sexprs with
   | [] -> exprs
   | _ -> let exp = List.hd sexprs in
-         let tags = disj_list [tag_const ; tag_vars ; tag_if ; tag_lambda ; tag_applic ; macro_quasiquate ; macro_let ; macro_let_star] in
-         rec_tag_parser (List.tl sexprs) (exprs@[tags exp]) 
+  let tags = disj_list [tag_const ; tag_vars ; tag_if ; tag_lambda ; tag_applic ; macro_quasiquate ; macro_let ; macro_let_star] in
+  rec_tag_parser (List.tl sexprs) (exprs@[tags exp])
+
+  and tag_parse  = function
+    | Bool sexpr ->  Const(Sexpr(Bool(sexpr)))
+    | Char sexpr -> Const(Sexpr(Char(sexpr)))
+    | Number sexpr -> Const(Sexpr(Number(sexpr)))
+    | String sexpr -> Const(Sexpr(String(sexpr)))
+    | Nil ->  Const(Void)
+    | Pair(Symbol("quote"),Pair(exp,Nil)) -> Const(Sexpr(exp))
+    | Symbol(sym) -> if not (is_reserved_word sym) then Var(sym) else nt_none()
+    | Pair(Symbol("if"),exp) -> tag_if exp
+    | Pair(Symbol("or"),exp) -> tag_or exp
+    | Pair(Symbol("define"),exp)->tag_define exp
+    | Pair(Symbol("set!"),exp)->tag_set exp
+    | Pair(Symbol("begin"),exp) -> tag_seq_exp exp
+    | Pair(Symbol("and"), exp) -> tag_parse (macro_and exp)    
+
+
 
 (* If *)
-  and tag_if sexpr = 
-    match sexpr with
-    | Pair(Symbol("if"),exp) -> 
-      (match exp with
-        | Pair(test,Pair(dit,Pair(dif,Nil))) -> 
-          let if_lst = rec_tag_parser [test;dit;dif] [] in
-          make_if_exp if_lst
-        | Pair(test,Pair(dit,Nil)) -> 
-          let if_lst = rec_tag_parser [test;dit] [] in
-          make_if_exp (if_lst@[Const(Void)])
-        | _ -> nt_none())
-    |_ -> nt_none() 
+  and tag_if exp = 
+    match exp with
+      | Pair(test,Pair(dit,Pair(dif,Nil))) -> 
+        If((tag_parse test), (tag_parse dit),(tag_parse dif))
+      | Pair(test,Pair(dit,Nil)) -> 
+        If((tag_parse test),(tag_parse dit),Const(Void))
 
 (* Lambda *)
   and tag_lambda sexpr = 
@@ -240,12 +269,45 @@ let rec rec_tag_parser sexprs exprs =
           let mac = make_qq_pair e in
           (List. hd (rec_tag_parser [mac] []))
     | _ -> nt_none()
+  
+   (*Disjunctions - which is or-expresion*)
+  and tag_or exp =
+  match exp with 
+  |Pair(sexpr, Nil) -> tag_parse sexpr
+  |Pair(sexpr,rest) -> Or((List.map tag_parse (pair_to_list exp)))
+  | Nil -> Const(Sexpr(Bool(false)))
+  | _-> raise X_syntax_error
+
+  (*Definitions*)
+  and tag_define exp= 
+    match exp with 
+      |Pair(Symbol(str),Nil) ->if not (is_reserved_word str) then Def(Var(str),Const(Void))  else nt_none() (*just declaration*)
+      |Pair(Symbol(str),Pair(sexpr,Nil)) ->if not (is_reserved_word str) then  Def(Var(str), (tag_parse sexpr))  else nt_none() 
+      | _-> raise X_syntax_error
+
+    
+  (*Assignments - set!*)
+  and tag_set exp=
+      match exp with
+      |Pair(x,Pair(y,Nil)) -> 
+      let v=tag_parse x in
+        if (is_var v) then Set(v,(tag_parse y))  else nt_none()  
+      |_ -> raise X_syntax_error
+  
+  (* Sequences - explicisy*)
+  and tag_seq_exp exp= 
+  match exp with
+    | Nil -> Const(Void) (*An empty sequence should be tag-parsed to Const Void*)
+    | Pair(sexpr,Nil)-> tag_parse sexpr
+    | Pair(Symbol("begin"),rest) -> tag_seq_exp rest
+    | Pair(sexpr,rest)->Seq((List.map tag_parse (pair_to_list exp))) 
+
 
   (* Let *)
   and macro_let sexpr = 
   match sexpr with
   | Pair(Symbol("let"),e)->
-      let app = let_to_lambda e in
+  let app = let_to_lambda e in
           (List. hd (rec_tag_parser [app] []))
   | _ -> nt_none()
 
@@ -275,10 +337,14 @@ let rec rec_tag_parser sexprs exprs =
         | _ -> nt_none()
       )
     | _ -> nt_none()
-    ;;
 
+  and macro_and exp = match exp with
+    | Nil -> Bool(true)
+    | Pair(sexpr, Nil) -> sexpr
+    | Pair(sexpr, rest) -> Pair(Symbol("if"), Pair(sexpr, Pair( (macro_and rest), Pair( Bool(false), Nil ))))
+    | _ -> raise X_syntax_error
 
-let tag_parse_expressions sexpr = rec_tag_parser sexpr [];;
+let tag_parse_expressions sexpr =(List.map tag_parse sexpr);;
 
   
 end;; (* struct Tag_Parser *)
