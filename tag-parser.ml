@@ -299,8 +299,8 @@ let rec rec_tag_parser sexprs exprs =
   match exp with
     | Nil -> Const(Void) (*An empty sequence should be tag-parsed to Const Void*)
     | Pair(sexpr,Nil)-> tag_parse sexpr
-    | Pair(Symbol("begin"),rest) -> tag_seq_exp rest
-    | Pair(sexpr,rest)->Seq((List.map tag_parse (pair_to_list exp))) 
+    | Pair(sexpr,rest)-> Seq(drop_seq (List.map tag_parse (pair_to_list exp))) 
+  
 
 
   (* Let *)
