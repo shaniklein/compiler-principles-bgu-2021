@@ -122,7 +122,6 @@ let rec make_qq_pair sexpr =
   | Pair(Symbol("unquote"),Pair(e,Nil)) -> e                  (* 1 *)   
   | Pair(Symbol("unquote-splicing"),_) -> nt_none()           (* 2 *)
   | Symbol(s) -> Pair(Symbol("quote"),Pair(Symbol(s),Nil))    (* 3 *)
-  | Nil -> Pair(Symbol("quote"),Pair(Nil,Nil))
   | Pair(a,b) ->                                              (* 5 *)
     (
       try match a with 
@@ -135,7 +134,7 @@ let rec make_qq_pair sexpr =
       with X_no_match ->
         Pair(Symbol("cons"), Pair((make_qq_pair a),Pair((make_qq_pair b),Nil)))
     )
-  | _ -> nt_none()  ;;
+  | _ -> Pair(Symbol("quote"),Pair(sexpr,Nil))  ;;
 
 (* ------------------------------------- *)
 (* Let Expressions 3.2.2.3 *)
@@ -185,29 +184,41 @@ let rec let_to_lambda sexpr =
 
 (* ------------------------------------- *)
 
-(* Recursive Tag Parser *)
-let rec rec_tag_parser sexprs exprs =  
-  match sexprs with
-  | [] -> exprs
-  | _ -> let exp = List.hd sexprs in
-  let tags = disj_list [tag_const ; tag_vars ; tag_if ; tag_lambda ; tag_applic ; macro_quasiquate ; macro_let ; macro_let_star] in
-  rec_tag_parser (List.tl sexprs) (exprs@[tags exp])
-
-  and tag_parse  = function
+  let rec tag_parse  = function
+    (* Constants *)
     | Bool sexpr ->  Const(Sexpr(Bool(sexpr)))
     | Char sexpr -> Const(Sexpr(Char(sexpr)))
     | Number sexpr -> Const(Sexpr(Number(sexpr)))
     | String sexpr -> Const(Sexpr(String(sexpr)))
     | Nil ->  Const(Void)
     | Pair(Symbol("quote"),Pair(exp,Nil)) -> Const(Sexpr(exp))
+    (* Variables *)
     | Symbol(sym) -> if not (is_reserved_word sym) then Var(sym) else nt_none()
+    (* Conditionals *)
     | Pair(Symbol("if"),exp) -> tag_if exp
+    (* Lambda *)
+    | Pair(Symbol("lambda"),Pair(arglist,body)) -> tag_lambda arglist body
+    (* Disjunctions *)
     | Pair(Symbol("or"),exp) -> tag_or exp
+    (* Definitions *)
     | Pair(Symbol("define"),exp)->tag_define exp
+    (* Assignments *)
     | Pair(Symbol("set!"),exp)->tag_set exp
+    (* Sequences *)
     | Pair(Symbol("begin"),exp) -> tag_seq_exp exp
-    | Pair(Symbol("and"), exp) -> tag_parse (macro_and exp)    
 
+    (* QuasiQuote *)
+    | Pair(Symbol("quasiquote"),Pair(e,Nil)) -> tag_parse (make_qq_pair e)
+    (* Let *)
+    | Pair(Symbol("let"),e)-> tag_parse (let_to_lambda e)
+    (* Let-Astrics *)
+    | Pair(Symbol("let*"),e)-> macro_let_star e
+    (* Letrec *)
+    | Pair(Symbol("letrec"),e)-> macro_letrec e
+    (* And *)
+    | Pair(Symbol("and"), exp) -> tag_parse (macro_and exp)  
+    (* Application *)
+    | Pair(app,args) -> tag_applic app args  
 
 
 (* If *)
@@ -217,58 +228,47 @@ let rec rec_tag_parser sexprs exprs =
         If((tag_parse test), (tag_parse dit),(tag_parse dif))
       | Pair(test,Pair(dit,Nil)) -> 
         If((tag_parse test),(tag_parse dit),Const(Void))
+      | _ -> nt_none()
 
 (* Lambda *)
-  and tag_lambda sexpr = 
-    (* helper function *)
-    let make_symbols lst = 
-      List.map (fun (s) -> match s with |Var(sym) -> sym | _->nt_none()) lst
-    and
-    check_body body = 
-      match body with
-      | Pair (bdy,Nil) -> bdy
-      | _ ->  get_last_sexpr body
-    in
-    (* the main function *)
-    match sexpr with
-    | Pair(Symbol("lambda"),Pair(arglist,body)) -> 
-        let body = check_body body in
-        let a,b = make_expr_list arglist [] in
-        if b = [] then
-          LambdaSimple((make_symbols a),(List.hd (rec_tag_parser [body] [])))
-        else 
-          LambdaOpt((make_symbols a) , (List.hd (make_symbols b)), (List.hd (rec_tag_parser [body] [])))
-    | _ -> nt_none() 
+and tag_lambda arglist body = 
+  (* helper function *)
+  let make_symbols lst = 
+    List.map (fun (s) -> match s with |Var(sym) -> sym | _->nt_none()) lst
+  and
+  check_body body = 
+    match body with
+    | Pair (bdy,Nil) -> bdy
+    | _ ->  get_last_sexpr body
+  in
+  (* the main function *)
+  (* let body = check_body body in *)
+  let body = Pair(Symbol("begin"),body) in
+  let a,b = make_expr_list arglist [] in
+  if b = [] then
+    LambdaSimple((make_symbols a),(tag_parse body))
+  else 
+    LambdaOpt((make_symbols a) , (List.hd (make_symbols b)), (tag_parse body))
 
 (* Applic *)
-  and tag_applic sexpr = 
-    let get_sexper_list args = 
-      let lst,_ = make_expr_list args [] in
-      lst 
-    in
-    match sexpr with
-    | Pair(app,args) -> Applic((List.hd (rec_tag_parser [app] [])) , (get_sexper_list args ))
-    | _ -> nt_none()
+  and tag_applic app args = 
+  let get_sexper_list args = 
+    let lst,_ = make_expr_list args [] in
+    lst 
+  in
+  Applic((tag_parse app) , (get_sexper_list args ))
 
   (* Pair of sexpr -> (exprs list , [last one if dotted])*)  
   and make_expr_list nest_pair lst= 
     let get_exp sexpr = 
       match sexpr with
-      | Pair(e,res) -> ((List.hd (rec_tag_parser [e] [])),res)
+      | Pair(e,res) -> ((tag_parse e ),res)
       | _ ->  nt_none()
     in
     if nest_pair = Nil then (lst,[]) else
     try let v,res = get_exp nest_pair in
       if res = Nil then (lst@[v],[]) else make_expr_list res (lst@[v]) 
-    with X_no_match -> (lst,(rec_tag_parser [nest_pair] []))
-
-  (* Quasiquote *)
-  and macro_quasiquate sexpr = 
-    match sexpr with
-    | Pair(Symbol("quasiquote"),Pair(e,Nil)) ->
-          let mac = make_qq_pair e in
-          (List. hd (rec_tag_parser [mac] []))
-    | _ -> nt_none()
+    with X_no_match -> (lst,[(tag_parse nest_pair)])
   
    (*Disjunctions - which is or-expresion*)
   and tag_or exp =
@@ -288,28 +288,19 @@ let rec rec_tag_parser sexprs exprs =
     
   (*Assignments - set!*)
   and tag_set exp=
-      match exp with
+    match exp with
       |Pair(x,Pair(y,Nil)) -> 
-      let v=tag_parse x in
-        if (is_var v) then Set(v,(tag_parse y))  else nt_none()  
+        let v=tag_parse x in
+          if (is_var v) then Set(v,(tag_parse y))  else nt_none()  
       |_ -> raise X_syntax_error
   
   (* Sequences - explicisy*)
   and tag_seq_exp exp= 
-  match exp with
-    | Nil -> Const(Void) (*An empty sequence should be tag-parsed to Const Void*)
-    | Pair(sexpr,Nil)-> tag_parse sexpr
-    | Pair(sexpr,rest)-> Seq(drop_seq (List.map tag_parse (pair_to_list exp))) 
+    match exp with
+      | Nil -> Const(Void) (*An empty sequence should be tag-parsed to Const Void*)
+      | Pair(sexpr,Nil)-> tag_parse sexpr
+      | Pair(sexpr,rest)-> Seq(drop_seq (List.map tag_parse (pair_to_list exp))) 
   
-
-
-  (* Let *)
-  and macro_let sexpr = 
-  match sexpr with
-  | Pair(Symbol("let"),e)->
-  let app = let_to_lambda e in
-          (List. hd (rec_tag_parser [app] []))
-  | _ -> nt_none()
 
   (* Let* *)
   and macro_let_star sexpr = 
@@ -319,24 +310,51 @@ let rec rec_tag_parser sexprs exprs =
       | _ -> nt_none()
     in
     match sexpr with
-    | Pair(Symbol("let*"),e)->
-      (
-        match e with
-        | Pair (args,body)->
-          (match args with
-            (* base case 1 *)
-            | Nil -> (List. hd (rec_tag_parser [Pair(Symbol("let"),e)] []))
-            (* base case 2 *)   
-            | Pair (Pair (v, Pair (a, Nil)),Nil) -> (List. hd (rec_tag_parser [Pair(Symbol("let"),e)] []))
-            (* case 3 *) 
-            | _ -> let v1,els = get_car_cdr args in
-            let els = Pair(Pair(Symbol("let*"),Pair(els,body)),Nil) in
-            let exp = Pair(Symbol("let"),Pair(v1,els))in
-            (List. hd (rec_tag_parser [exp] []))
-          )
-        | _ -> nt_none()
+    | Pair (args,body)->
+      (match args with
+        (* base case 1 *)
+        | Nil -> ( tag_parse (Pair(Symbol("let"),sexpr)) )
+        (* base case 2 *)   
+        | Pair (Pair (v, Pair (a, Nil)),Nil) -> ( tag_parse (Pair(Symbol("let"),sexpr)) )
+        (* case 3 *) 
+        | _ -> let v1,els = get_car_cdr args in
+        let els = Pair(Pair(Symbol("let*"),Pair(els,body)),Nil) in
+        let exp = Pair(Symbol("let"),Pair(v1,els))in
+        (tag_parse exp)
       )
     | _ -> nt_none()
+
+  (* Letrec *)
+  and macro_letrec sexpr = 
+    let rec add_set_bang p ls= 
+      match p with
+      | Pair(car,cdr)->
+        if cdr = Nil then ls@[Pair(Symbol("set!"),car)]
+        else add_set_bang cdr (ls@[Pair(Symbol("set!"),car)])
+      | _ -> nt_none()
+    in
+    let extract p = 
+      match p with
+      |Pair(e,Nil) -> e
+      |_-> nt_none()
+    in
+    match sexpr with
+    | Pair(defs,body)->
+        let vars,_ = open_binding defs [] [] in
+        let whatever = (List.hd (Reader.read_sexprs "'whatever")) in
+        let vars = list_to_pair (List.map (fun (x) -> Pair(x,Pair(whatever,Nil))) vars) in
+        let body = Pair(Symbol("lambda"),Pair(Nil,body)) in
+        let body = Pair(body,Nil) in
+        let sets = list_to_pair (add_set_bang defs []) in
+        let sets = extract sets in
+        let sets = Pair(sets,Pair(body,Nil)) in
+        let    e = Pair(Symbol("let"),Pair(vars,sets)) in
+        (tag_parse e)
+    | _ -> nt_none() 
+
+
+
+
 
   and macro_and exp = match exp with
     | Nil -> Bool(true)
