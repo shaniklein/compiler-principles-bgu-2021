@@ -57,7 +57,6 @@ let reserved_word_list =
    "unquote-splicing"];;  
 
 (* work on the tag parser starts here *)
-
 (* ------------------------------------- *)
 (* Constants 3.2.1.1 *)
 (* ------------------------------------- *)
@@ -161,17 +160,33 @@ let rec pair_to_list p =
   | Nil -> []
   | _-> raise X_syntax_error;;
 
-  let is_var expr =
+let is_var expr =
   match expr with
   | Var(_) -> true
   | _ -> false
 
-  let rec drop_seq l =
-    match l with
-    | [] -> []
-    | Seq(s)  :: tl -> drop_seq ((List.hd s)::List.tl s)
-    | hd :: tl -> hd :: drop_seq tl;;
+let rec drop_seq l =
+  match l with
+  | [] -> []
+  | Seq(s)  :: tl -> drop_seq ((List.hd s)::List.tl s)
+  | hd :: tl -> hd :: drop_seq tl;;
 
+(*given list of (v_1 expr_1) (v_2 expr_2) .... (v_n expr_n) 
+returns (v_1,v_2,..v_n  *)
+let rec get_vars args = 
+  match args with
+  | Nil -> Nil
+  | Pair(Pair(name, Pair(value, Nil)), rest) -> Pair(name, get_vars rest)
+  (* | Pair(Pair(name, value), rest) -> Pair(name, get_vars args) *)
+  | _ -> args;;
+
+(*given list of (v_1 expr_1) (v_2 expr_2) .... (v_n expr_n) 
+returns (expr_1,expr_2,..xpr_n*)
+let rec get_expressions args = 
+  match args with
+  | Nil -> Nil
+  | Pair(Pair(name, Pair(value, Nil)), rest) -> Pair(value, get_expressions rest)
+  | _ -> args;;
 
 let rec let_to_lambda sexpr =
   match sexpr with
@@ -207,8 +222,7 @@ let rec rec_tag_parser sexprs exprs =
     | Pair(Symbol("set!"),exp)->tag_set exp
     | Pair(Symbol("begin"),exp) -> tag_seq_exp exp
     | Pair(Symbol("and"), exp) -> tag_parse (macro_and exp)    
-
-
+    | Pair(Symbol("pset!"),exp)-> macro_pset exp
 
 
 (* If *)
@@ -345,13 +359,26 @@ let rec rec_tag_parser sexprs exprs =
       )
     | _ -> nt_none()
 
-  and macro_and exp = match exp with
+  and macro_and exp = 
+  match exp with
     | Nil -> Bool(true)
     | Pair(sexpr, Nil) -> sexpr
     | Pair(sexpr, rest) -> Pair(Symbol("if"), Pair(sexpr, Pair( (macro_and rest), Pair( Bool(false), Nil ))))
     | _ -> raise X_syntax_error
 
+  and macro_pset args =
+
+    let exprs= get_expressions args in
+    let exprs= List.map tag_parse (pair_to_list exprs) in
+    let vars= get_vars args in
+    let vars= List.map tag_parse (pair_to_list vars) in
+    let combined_pairs=List.combine exprs vars in
+    let combined_pairs=List.map (fun (var,exp)->Set(var,exp)) combined_pairs in
+    
+     (*TODO - check how to return Const(Void)*)
+     match combined_pairs with 
+    | _ -> Const(Void)
+    
 let tag_parse_expressions sexpr =(List.map tag_parse sexpr);;
 
-  
 end;; (* struct Tag_Parser *)
