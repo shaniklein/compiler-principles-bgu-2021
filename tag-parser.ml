@@ -210,6 +210,7 @@ let rec rec_tag_parser sexprs exprs =
 
 
 
+
 (* If *)
   and tag_if exp = 
     match exp with
@@ -281,10 +282,16 @@ let rec rec_tag_parser sexprs exprs =
   (*Definitions*)
   and tag_define exp= 
     match exp with 
-      |Pair(Symbol(str),Nil) ->if not (is_reserved_word str) then Def(Var(str),Const(Void))  else nt_none() (*just declaration*)
-      |Pair(Symbol(str),Pair(sexpr,Nil)) ->if not (is_reserved_word str) then  Def(Var(str), (tag_parse sexpr))  else nt_none() 
+      |Pair(Symbol(var_name),Nil) ->if not (is_reserved_word var_name) then Def(Var(var_name),Const(Void))  else nt_none() (*just declaration*)
+      |Pair(Symbol(var_name),Pair(sexpr,Nil)) ->if not (is_reserved_word var_name) then  Def(Var(var_name), (tag_parse sexpr))  else nt_none() 
+      |Pair(Pair(Symbol(var_name),args),expr) -> (macro_define var_name args expr)  (* MIT Define *)
       | _-> raise X_syntax_error
 
+  and macro_define var_name args expr = 
+  let l = (List.map tag_parse (pair_to_list expr)) in
+    if(List.length l != 0 && (not (is_reserved_word var_name) )) then 
+      (Def(Var(var_name), tag_parse (Pair(Symbol("lambda"), Pair(args, expr)))))
+    else raise X_syntax_error
     
   (*Assignments - set!*)
   and tag_set exp=
