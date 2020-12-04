@@ -250,14 +250,8 @@ and tag_lambda arglist body =
   (* helper function *)
   let make_symbols lst = 
     List.map (fun (s) -> match s with |Var(sym) -> sym | _->nt_none()) lst
-  and
-  check_body body = 
-    match body with
-    | Pair (bdy,Nil) -> bdy
-    | _ ->  get_last_sexpr body
   in
   (* the main function *)
-  (* let body = check_body body in *)
   let body = Pair(Symbol("begin"),body) in
   let a,b = make_expr_list arglist [] in
   if b = [] then
@@ -321,6 +315,7 @@ and tag_lambda arglist body =
       | Nil -> Const(Void) (*An empty sequence should be tag-parsed to Const Void*)
       | Pair(sexpr,Nil)-> tag_parse sexpr
       | Pair(sexpr,rest)-> Seq(drop_seq (List.map tag_parse (pair_to_list exp))) 
+      | _ -> nt_none()
   
 
   (* Let* *)
