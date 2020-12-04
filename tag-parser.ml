@@ -232,8 +232,11 @@ let rec let_to_lambda sexpr =
     | Pair(Symbol("letrec"),e)-> macro_letrec e
     (* And *)
     | Pair(Symbol("and"), exp) -> tag_parse (macro_and exp)  
+    (* Cond *)
+    |Pair(Symbol("cond"),exp) -> tag_parse (macro_cond exp)
     (* Application *)
-    | Pair(app,args) -> tag_applic app args  
+    | Pair(app,args) -> tag_applic app args 
+     
 
 
 (* If *)
@@ -389,6 +392,39 @@ and tag_lambda arglist body =
      match combined_pairs with 
     | _ -> Const(Void)
     
-let tag_parse_expressions sexpr =(List.map tag_parse sexpr);;
+  and macro_cond args= 
+    match args with
+    (*test case 2*)
+    | Pair(Pair(test,Pair(Symbol("=>"),Pair(dit,Nil))),Nil) -> cond2_nil test dit
+    | Pair(Pair(test,Pair(Symbol("=>"),Pair(dit,Nil))),dif) -> cond2_dif test dit dif   
+    (*test case 3*)
+    |  Pair(Pair(Symbol("else"),dit),_) -> Pair(Symbol("begin"),dit)
+    (*test case 1*)
+    |Pair(Pair(test,dit),Nil) -> Pair(Symbol("if"),Pair(test,Pair(Pair(Symbol("begin"),dit),Nil)))
+    |Pair(Pair(test,dit),dif) -> Pair(Symbol("if"),Pair(test,Pair(Pair(Symbol("begin"),dit),Pair(Pair(Symbol("cond"),dif),Nil))))
+    |  _ -> args 
+
+    and cond2_nil test dit = 
+     Pair(Symbol("let"),Pair(Pair((make_let "value" test),
+     Pair((make_let "f" (make_lambda dit)),Nil)),
+     Pair((make_if_then "value" "f"),Nil)))
+
+    and cond2_dif test dit dif = 
+      Pair(Symbol("let"),Pair(Pair((make_let "value" test),
+      Pair((make_let "f" (make_lambda dit)),
+      Pair((make_let "rest" (make_lambda (Pair(Symbol("cond"),dif)))),Nil))),
+      Pair((make_if_then_else "value" "f" "rest"),Nil)))
+    
+      
+    and make_lambda exp=  Pair(Symbol("lambda"),Pair(Nil,Pair(exp,Nil)))
+    and make_let variable value = Pair(Symbol(variable),Pair(value,Nil))
+    and make_if_then test dit_func=Pair(Symbol("if"), Pair(Symbol(test),Pair(Pair(Pair(Symbol(dit_func),Nil),Pair(Symbol(test),Nil)),Nil)))
+    and make_if_then_else test dit_func dif_func = Pair(Symbol("if"),Pair(Symbol(test),Pair(Pair(Pair(Symbol(dit_func),Nil),Pair(Symbol(test),Nil)),
+                                                  Pair(Pair(Symbol(dif_func),Nil),Nil))));;
+
+
+
+
+    let tag_parse_expressions sexpr =(List.map tag_parse sexpr);;
 
 end;; (* struct Tag_Parser *)
