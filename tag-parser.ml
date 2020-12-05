@@ -176,7 +176,6 @@ let rec get_vars args =
   match args with
   | Nil -> Nil
   | Pair(Pair(name, Pair(value, Nil)), rest) -> Pair(name, get_vars rest)
-  (* | Pair(Pair(name, value), rest) -> Pair(name, get_vars args) *)
   | _ -> args;;
 
 (*given list of (v_1 expr_1) (v_2 expr_2) .... (v_n expr_n) 
@@ -219,7 +218,7 @@ let rec let_to_lambda sexpr =
     | Pair(Symbol("define"),exp)->tag_define exp
     (* Assignments *)
     | Pair(Symbol("set!"),exp)->tag_set exp
-    | Pair(Symbol("pset!"),exp)-> macro_pset exp
+    | Pair(Symbol("pset!"),exp)-> tag_parse (macro_pset exp)
     (* Sequences  *)
     | Pair(Symbol("begin"),exp) -> tag_seq_exp exp
     (* QuasiQuote *)
@@ -372,20 +371,38 @@ and tag_lambda arglist body =
     | Pair(sexpr, rest) -> Pair(Symbol("if"), Pair(sexpr, Pair( (macro_and rest), Pair( Bool(false), Nil ))))
     | _ -> raise X_syntax_error
 
-  
-    and macro_pset args =
+    and get_string_from_symbol sym=match sym with
+    | Symbol(s)->s
+    | _ -> raise X_syntax_error
+
+    
+    and macro_pset args =   
     let exprs= get_expressions args in
-    let exprs= List.map tag_parse (pair_to_list exprs) in
-    let vars= get_vars args in
-    let vars= List.map tag_parse (pair_to_list vars) in
-    let combined_pairs=List.combine exprs vars in
-    let combined_pairs=List.map (fun (var,exp)->Set(var,exp)) combined_pairs in
-    
-     (*TODO - check how to return Const(Void)*)
-     match combined_pairs with 
-    | _ -> Const(Void)
-    
-  and macro_cond args= 
+    let vars= get_vars args in    
+    let vars_as_string= List.map (fun (sym)->get_string_from_symbol sym)  (pair_to_list vars) in
+    let new_vars=generate_new_vars vars_as_string [] vars_as_string in
+    let new_vars=List.map (fun s->Symbol (s)) new_vars in
+    let vars=List.map (fun s->Symbol (s)) vars_as_string in
+    let combined_pairs=List.combine vars new_vars in
+    let body=      
+    List.map (fun (var,exp)->Pair(Symbol("set! "), Pair(var,Pair( exp,Nil)))) combined_pairs in
+    let lmbda=Pair(Symbol("lambda"),Pair((list_to_pair new_vars),Pair((list_to_pair body),Nil))) in
+    Pair(lmbda,exprs)  
+     
+
+    and generate_new_vars all_vars vars_to_use  original_vars =
+      match original_vars with 
+      |[]->vars_to_use
+      |a::b->
+        let random_word = a^"s" in
+        let new_original_vars= random_word::b in
+        if( List.mem random_word all_vars) then 
+          generate_new_vars all_vars vars_to_use new_original_vars
+        else
+        let new_all_vars=random_word::all_vars in
+        random_word::generate_new_vars new_all_vars vars_to_use b 
+
+    and macro_cond args= 
     match args with
     (*test case 2*)
     | Pair(Pair(test,Pair(Symbol("=>"),Pair(dit,Nil))),Nil) -> cond2_nil test dit
