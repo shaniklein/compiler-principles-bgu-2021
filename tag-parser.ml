@@ -371,11 +371,15 @@ and tag_lambda arglist body =
     | Pair(sexpr, rest) -> Pair(Symbol("if"), Pair(sexpr, Pair( (macro_and rest), Pair( Bool(false), Nil ))))
     | _ -> raise X_syntax_error
 
-  
+    and get_string_from_symbol sym=match sym with
+    | Symbol(s)->s
+    | _ -> raise X_syntax_error
+
+    
     and macro_pset args =   
     let exprs= get_expressions args in
     let vars= get_vars args in    
-    let vars_as_string= List.map (fun (Symbol(s))->s)  (pair_to_list vars) in
+    let vars_as_string= List.map (fun (sym)->get_string_from_symbol sym)  (pair_to_list vars) in
     let new_vars=generate_new_vars vars_as_string [] vars_as_string in
     let new_vars=List.map (fun s->Symbol (s)) new_vars in
     let vars=List.map (fun s->Symbol (s)) vars_as_string in
