@@ -120,7 +120,7 @@ let rec get_last_sexpr sexpr =
 let rec make_qq_pair sexpr = 
   match sexpr with
   | Pair(Symbol("unquote"),Pair(e,Nil)) -> e                  (* 1 *)   
-  | Pair(Symbol("unquote-splicing"),_) -> nt_none()           (* 2 *)
+  | Pair(Symbol("unquote-splicing"),Pair(e,Nil)) -> e         (* 2 *)
   | Symbol(s) -> Pair(Symbol("quote"),Pair(Symbol(s),Nil))    (* 3 *)
   | Pair(a,b) ->                                              (* 5 *)
     (
