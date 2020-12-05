@@ -57,7 +57,6 @@ let reserved_word_list =
    "unquote-splicing"];;  
 
 (* work on the tag parser starts here *)
-
 (* ------------------------------------- *)
 (* Constants 3.2.1.1 *)
 (* ------------------------------------- *)
@@ -160,17 +159,33 @@ let rec pair_to_list p =
   | Nil -> []
   | _-> raise X_syntax_error;;
 
-  let is_var expr =
+let is_var expr =
   match expr with
   | Var(_) -> true
   | _ -> false
 
-  let rec drop_seq l =
-    match l with
-    | [] -> []
-    | Seq(s)  :: tl -> drop_seq ((List.hd s)::List.tl s)
-    | hd :: tl -> hd :: drop_seq tl;;
+let rec drop_seq l =
+  match l with
+  | [] -> []
+  | Seq(s)  :: tl -> drop_seq ((List.hd s)::List.tl s)
+  | hd :: tl -> hd :: drop_seq tl;;
 
+(*given list of (v_1 expr_1) (v_2 expr_2) .... (v_n expr_n) 
+returns (v_1,v_2,..v_n  *)
+let rec get_vars args = 
+  match args with
+  | Nil -> Nil
+  | Pair(Pair(name, Pair(value, Nil)), rest) -> Pair(name, get_vars rest)
+  (* | Pair(Pair(name, value), rest) -> Pair(name, get_vars args) *)
+  | _ -> args;;
+
+(*given list of (v_1 expr_1) (v_2 expr_2) .... (v_n expr_n) 
+returns (expr_1,expr_2,..xpr_n*)
+let rec get_expressions args = 
+  match args with
+  | Nil -> Nil
+  | Pair(Pair(name, Pair(value, Nil)), rest) -> Pair(value, get_expressions rest)
+  | _ -> args;;
 
 let rec let_to_lambda sexpr =
   match sexpr with
@@ -204,9 +219,9 @@ let rec let_to_lambda sexpr =
     | Pair(Symbol("define"),exp)->tag_define exp
     (* Assignments *)
     | Pair(Symbol("set!"),exp)->tag_set exp
-    (* Sequences *)
+    | Pair(Symbol("pset!"),exp)-> macro_pset exp
+    (* Sequences  *)
     | Pair(Symbol("begin"),exp) -> tag_seq_exp exp
-
     (* QuasiQuote *)
     | Pair(Symbol("quasiquote"),Pair(e,Nil)) -> tag_parse (make_qq_pair e)
     (* Let *)
@@ -217,8 +232,11 @@ let rec let_to_lambda sexpr =
     | Pair(Symbol("letrec"),e)-> macro_letrec e
     (* And *)
     | Pair(Symbol("and"), exp) -> tag_parse (macro_and exp)  
+    (* Cond *)
+    |Pair(Symbol("cond"),exp) -> tag_parse (macro_cond exp)
     (* Application *)
-    | Pair(app,args) -> tag_applic app args  
+    | Pair(app,args) -> tag_applic app args 
+     
 
 
 (* If *)
@@ -275,10 +293,16 @@ and tag_lambda arglist body =
   (*Definitions*)
   and tag_define exp= 
     match exp with 
-      |Pair(Symbol(str),Nil) ->if not (is_reserved_word str) then Def(Var(str),Const(Void))  else nt_none() (*just declaration*)
-      |Pair(Symbol(str),Pair(sexpr,Nil)) ->if not (is_reserved_word str) then  Def(Var(str), (tag_parse sexpr))  else nt_none() 
+      |Pair(Symbol(var_name),Nil) ->if not (is_reserved_word var_name) then Def(Var(var_name),Const(Void))  else nt_none() (*just declaration*)
+      |Pair(Symbol(var_name),Pair(sexpr,Nil)) ->if not (is_reserved_word var_name) then  Def(Var(var_name), (tag_parse sexpr))  else nt_none() 
+      |Pair(Pair(Symbol(var_name),args),expr) -> (macro_define var_name args expr)  (* MIT Define *)
       | _-> raise X_syntax_error
 
+  and macro_define var_name args expr = 
+  let l = (List.map tag_parse (pair_to_list expr)) in
+    if(List.length l != 0 && (not (is_reserved_word var_name) )) then 
+      (Def(Var(var_name), tag_parse (Pair(Symbol("lambda"), Pair(args, expr)))))
+    else raise X_syntax_error
     
   (*Assignments - set!*)
   and tag_set exp=
@@ -319,8 +343,9 @@ and tag_lambda arglist body =
       )
     | _ -> nt_none()
 
-  (* Letrec *)
+  (* Letrec*)
   and macro_letrec sexpr = 
+
     let rec add_set_bang p ls= 
       match p with
       | Pair(car,cdr)->
@@ -347,7 +372,48 @@ and tag_lambda arglist body =
     | Pair(sexpr, rest) -> Pair(Symbol("if"), Pair(sexpr, Pair( (macro_and rest), Pair( Bool(false), Nil ))))
     | _ -> raise X_syntax_error
 
-let tag_parse_expressions sexpr =(List.map tag_parse sexpr);;
-
   
+    and macro_pset args =
+    let exprs= get_expressions args in
+    let exprs= List.map tag_parse (pair_to_list exprs) in
+    let vars= get_vars args in
+    let vars= List.map tag_parse (pair_to_list vars) in
+    let combined_pairs=List.combine exprs vars in
+    let combined_pairs=List.map (fun (var,exp)->Set(var,exp)) combined_pairs in
+    
+     (*TODO - check how to return Const(Void)*)
+     match combined_pairs with 
+    | _ -> Const(Void)
+    
+  and macro_cond args= 
+    match args with
+    (*test case 2*)
+    | Pair(Pair(test,Pair(Symbol("=>"),Pair(dit,Nil))),Nil) -> cond2_nil test dit
+    | Pair(Pair(test,Pair(Symbol("=>"),Pair(dit,Nil))),dif) -> cond2_dif test dit dif   
+    (*test case 3*)
+    |  Pair(Pair(Symbol("else"),dit),_) -> Pair(Symbol("begin"),dit)
+    (*test case 1*)
+    |Pair(Pair(test,dit),Nil) -> Pair(Symbol("if"),Pair(test,Pair(Pair(Symbol("begin"),dit),Nil)))
+    |Pair(Pair(test,dit),dif) -> Pair(Symbol("if"),Pair(test,Pair(Pair(Symbol("begin"),dit),Pair(Pair(Symbol("cond"),dif),Nil))))
+    |  _ -> args 
+
+    and cond2_nil test dit = 
+     Pair(Symbol("let"),Pair(Pair((make_let "value" test),
+     Pair((make_let "f" (make_lambda dit)),Nil)),
+     Pair((make_if_then "value" "f"),Nil)))
+
+    and cond2_dif test dit dif = 
+      Pair(Symbol("let"),Pair(Pair((make_let "value" test),
+      Pair((make_let "f" (make_lambda dit)),
+      Pair((make_let "rest" (make_lambda (Pair(Symbol("cond"),dif)))),Nil))),
+      Pair((make_if_then_else "value" "f" "rest"),Nil)))
+    
+      
+    and make_lambda exp=  Pair(Symbol("lambda"),Pair(Nil,Pair(exp,Nil)))
+    and make_let variable value = Pair(Symbol(variable),Pair(value,Nil))
+    and make_if_then test dit_func=Pair(Symbol("if"), Pair(Symbol(test),Pair(Pair(Pair(Symbol(dit_func),Nil),Pair(Symbol(test),Nil)),Nil)))
+    and make_if_then_else test dit_func dif_func = Pair(Symbol("if"),Pair(Symbol(test),Pair(Pair(Pair(Symbol(dit_func),Nil),Pair(Symbol(test),Nil)),
+                                                  Pair(Pair(Symbol(dif_func),Nil),Nil))));;
+    let tag_parse_expressions sexpr =(List.map tag_parse sexpr);;
+
 end;; (* struct Tag_Parser *)
