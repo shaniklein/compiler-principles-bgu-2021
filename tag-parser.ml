@@ -119,7 +119,7 @@ let rec get_last_sexpr sexpr =
 let rec make_qq_pair sexpr = 
   match sexpr with
   | Pair(Symbol("unquote"),Pair(e,Nil)) -> e                  (* 1 *)   
-  | Pair(Symbol("unquote-splicing"),_) -> nt_none()           (* 2 *)
+  | Pair(Symbol("unquote-splicing"),Pair(e,Nil)) -> e         (* 2 *)
   | Symbol(s) -> Pair(Symbol("quote"),Pair(Symbol(s),Nil))    (* 3 *)
   | Pair(a,b) ->                                              (* 5 *)
     (
@@ -352,24 +352,17 @@ and tag_lambda arglist body =
         else add_set_bang cdr (ls@[Pair(Symbol("set!"),car)])
       | _ -> nt_none()
     in
-    let extract p = 
-      match p with
-      |Pair(e,Nil) -> e
-      |_-> nt_none()
-    in
     match sexpr with
-    | Pair(defs,body)->
+      | Pair(defs,body)->
         let vars,_ = open_binding defs [] [] in
         let whatever = (List.hd (Reader.read_sexprs "'whatever")) in
         let vars = list_to_pair (List.map (fun (x) -> Pair(x,Pair(whatever,Nil))) vars) in
-        let body = Pair(Symbol("lambda"),Pair(Nil,body)) in
-        let body = Pair(body,Nil) in
-        let sets = list_to_pair (add_set_bang defs []) in
-        let sets = extract sets in
-        let sets = Pair(sets,Pair(body,Nil)) in
-        let    e = Pair(Symbol("let"),Pair(vars,sets)) in
+        let sets = add_set_bang defs [] in
+        let body = pair_to_list (Pair(Pair(Symbol("let"),Pair(Nil,body)),Nil)) in
+        let body = list_to_pair (sets@body) in
+        let e = Pair(Symbol("let"),Pair(vars,body)) in
         (tag_parse e)
-    | _ -> nt_none()  
+    | _ -> nt_none()
 
 
   and macro_and exp = match exp with
@@ -434,10 +427,6 @@ and tag_lambda arglist body =
     and make_if_then test dit_func=Pair(Symbol("if"), Pair(Symbol(test),Pair(Pair(Pair(Symbol(dit_func),Nil),Pair(Symbol(test),Nil)),Nil)))
     and make_if_then_else test dit_func dif_func = Pair(Symbol("if"),Pair(Symbol(test),Pair(Pair(Pair(Symbol(dit_func),Nil),Pair(Symbol(test),Nil)),
                                                   Pair(Pair(Symbol(dif_func),Nil),Nil))));;
-
-
-
-
     let tag_parse_expressions sexpr =(List.map tag_parse sexpr);;
 
 end;; (* struct Tag_Parser *)
