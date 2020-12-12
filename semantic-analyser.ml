@@ -120,21 +120,24 @@ let annotate_lexical_addresses e = annotate [[]] e;;
 
 (* changes all calls is tail position from Applic' -> ApplicTP' *)
 let rec change_to_tp in_tp e = 
+  let split_last = fun (l) -> ((List.rev (List.tl (List.rev l))),(List.hd (List.rev l))) in
   match e with 
-  | If'(tst,dit,dif) -> If'((change_to_tp in_tp tst),(change_to_tp in_tp dit),(change_to_tp in_tp dif))
-  | Seq'(s) -> Seq'((List.map (change_to_tp in_tp) s))
-  | Or'(lst) -> Or'((List.map (change_to_tp in_tp) lst))
+  | If'(tst,dit,dif) -> If'(tst,(change_to_tp in_tp dit),(change_to_tp in_tp dif))
+  | Seq'(s) -> let rest,last = split_last s in
+    Seq'(((List.map (change_to_tp false) rest))@[change_to_tp in_tp last])
+  | Or'(lst) -> let rest,last = split_last lst in
+    Or'(((List.map (change_to_tp false) rest))@[change_to_tp in_tp last])
   | LambdaSimple'(var_list, body) -> LambdaSimple'(var_list,(change_to_tp true body))
   | LambdaOpt'(var_list,opt,body) -> LambdaOpt'(var_list,opt,(change_to_tp true body))
-  | Applic'(op,lst) -> if in_tp then ApplicTP'(op,(List.map (change_to_tp false) lst)) else Applic'(op,(List.map (change_to_tp false) lst))
-  | Set'(v,n) -> Set'(v,(change_to_tp in_tp n))
+  | Applic'(op,lst) -> if in_tp then ApplicTP'((change_to_tp false op),(List.map (change_to_tp false ) lst)) else Applic'((change_to_tp false op),(List.map (change_to_tp false) lst))
+  | Set'(v,n) -> Set'(v,(change_to_tp false n))
   | Def'(a,b) -> Def'(a,(change_to_tp in_tp b)) 
   | other -> other ;;
 
 let annotate_tail_calls e = change_to_tp false e;;
 
 (* ---------------------- *)
-let box_set e = raise X_not_yet_implemented;;
+let box_set e = e;;
 
 let run_semantics expr =
   box_set
