@@ -136,14 +136,168 @@ let rec change_to_tp in_tp e =
 
 let annotate_tail_calls e = change_to_tp false e;;
 
+
 (* ---------------------- *)
-let box_set e = e;;
+let param_name param = List.nth param 0;;
 
-let run_semantics expr =
-  box_set
-    (annotate_tail_calls
-       (annotate_lexical_addresses expr));;
+let var_in_list var var_list = ((List.mem ((param_name var)::["1"]) var_list) || (List.mem ((param_name var)::["0"]) var_list));;
+
+let rec remove_duplicates_rec var_list unique_var_list = match var_list with
+  | [] -> unique_var_list
+  | var::rest -> if (var_in_list var unique_var_list) 
+                  then (remove_duplicates_rec rest unique_var_list) 
+                  else (remove_duplicates_rec rest (var::unique_var_list));;
+
+let remove_duplicates var_list = remove_duplicates_rec var_list [];;
+
+let extract_variable_name variable = match variable with 
+  | VarBound(name, level, index) -> name
+  | VarParam(name, index) -> name
+  (* TODO: raise exception? *)
+  | _ -> "Variable Name Not Found"
+
+let make_param_setter param_name index = Set'(VarParam(param_name, index), Box'(VarParam(param_name, index)));;
+
+let should_box param = List.nth param 1 = "1";;
+
+let rec convert_params_to_sets params index = match params with 
+  | [] -> []
+  | param::rest -> if(should_box param) 
+                    then ((make_param_setter (param_name param) index)::(convert_params_to_sets rest (index+1))) 
+                    else (convert_params_to_sets rest (index+1));;
+
+let create_seq params body = Seq'(List.append (convert_params_to_sets params 0) [body]);; 
+
+let rec any_param_for_boxing marked_params = match marked_params with 
+  | [] -> false
+  | first_param::rest -> if (should_box first_param) then true else any_param_for_boxing rest;;
+
+let rec count_param_writing_occurrences param body count = match body with
+  | Const'(value) -> []
+  | Var'(variable) -> []
+  | Set'(VarParam (variable,indx), value) -> List.append (if (variable = param) then [-1] else []) 
+                                               (count_param_writing_occurrences param value (count+1))
+  | Set'(VarBound (variable,level,index), value) -> List.append (if (variable = param) then [-1] else []) 
+  (count_param_writing_occurrences param value (count+1))
+  | Applic'(expression, args) -> List.append (count_param_writing_occurrences param expression count) (map_count_writing_occurences args param count)
+  | ApplicTP'(expression, args) -> List.append (count_param_writing_occurrences param expression count) (map_count_writing_occurences args param count)
+  | Seq'(exp_list) -> map_count_writing_occurences exp_list param count
+  | Or'(exp_list) -> map_count_writing_occurences exp_list param count
+  | Def'(variable, value) -> List.append (count_param_writing_occurrences param (Var'(variable)) count) (count_param_writing_occurrences param value count)
+
+  | If'(test, dit, dif) -> List.append 
+                            (List.append 
+                                (count_param_writing_occurrences param test (count+1)) 
+                                (count_param_writing_occurrences param dit (count+1))
+                            ) 
+                            (count_param_writing_occurrences param dif (count+1))
+  (* if param is in the lambda param_list it is in a new lexical scope, so no occurrence *)
+  | LambdaSimple'(p_list, b) -> if (List.mem param p_list) 
+                                  then [] 
+                                  else (if ((count_param_writing_occurrences param b (count+1)) = []) then [] else [count])
+  (* if param is in the lambda param_list it is in a new lexical scope, so no occurrence *)
+  | LambdaOpt'(p_list, opt_p, b) -> if (List.mem param (List.append p_list [opt_p]))
+                                      then [] 
+                                      else (if ((count_param_writing_occurrences param b (count+1)) = []) then [] else [count])
+  | _ -> []
   
+  and map_count_writing_occurences exp_list param count = match exp_list with
+    | [] -> []
+    | first_exp::rest -> List.append (count_param_writing_occurrences param first_exp count) (map_count_writing_occurences rest param (count+1));;
+
+
+let rec count_param_reading_occurrences param body count = match body with
+  | Const'(value) -> []
+  | Var'(variable) -> if ((extract_variable_name variable) = param) then [-1] else []
+  | Set'(variable, value) -> (count_param_reading_occurrences param value (count+1))
+  | Applic'(expression, args) -> List.append (count_param_reading_occurrences param expression count) (map_count_reading_occurences args param count)
+  | ApplicTP'(expression, args) -> List.append (count_param_reading_occurrences param expression count) (map_count_reading_occurences args param count)
+  | Seq'(exp_list) -> map_count_reading_occurences exp_list param count
+  | Or'(exp_list) -> map_count_reading_occurences exp_list param count
+  | Def'(variable, value) -> List.append (count_param_reading_occurrences param  (Var'(variable)) count) (count_param_reading_occurrences param value count)
+  | If'(test, dit, dif) -> List.append 
+                            (List.append 
+                                (count_param_reading_occurrences param test (count+1)) 
+                                (count_param_reading_occurrences param dit (count+1))
+                            ) 
+                            (count_param_reading_occurrences param dif (count+1))
+  (* if param is in the lambda param_list it is in a new lexical scope, so no occurrence *)
+  | LambdaSimple'(p_list, b) -> if (List.mem param p_list) 
+                                  then [] 
+                                  else (if ((count_param_reading_occurrences param b (count+1)) = []) then [] else [count])
+  (* if param is in the lambda param_list it is in a new lexical scope, so no occurrence *)
+  | LambdaOpt'(p_list, opt_p, b) -> if (List.mem param (List.append p_list [opt_p]))
+                                      then [] 
+                                      else (if ((count_param_reading_occurrences param b (count+1)) = []) then [] else [count])
+  | _ -> []
+
+  and map_count_reading_occurences exp_list param count = match exp_list with
+    | [] -> []
+    | first_exp::rest -> List.append (count_param_reading_occurrences param first_exp count) (map_count_reading_occurences rest param (count+1));;
+
+let match_write_occurance_with_read_occurances write_occur read_occurances = 
+  List.fold_left (fun matched read_occur -> (matched || (write_occur != read_occur))) false read_occurances;;
+
+let rec boxing_criterias_are_met read_occurances write_occurances = match write_occurances with 
+  | [] -> "0"
+  | write_occur::rest -> if(match_write_occurance_with_read_occurances write_occur read_occurances) 
+                          then "1" 
+                          else (boxing_criterias_are_met read_occurances rest);;
+
+let mark_param_for_boxing param body = 
+  let reading_occurences = count_param_reading_occurrences param body 0 in
+  let writing_occurences = count_param_writing_occurrences param body 0 in
+  let marked_param = param::[boxing_criterias_are_met reading_occurences writing_occurences] in
+  marked_param;;
+
+let check_each_param_for_boxing params body = List.map (fun param -> mark_param_for_boxing param body) params;;
+
+(* Return true if the givene variable is in the var list *)
+let var_found_in_list variable var_list = List.mem ((variable)::["1"]) var_list;;
+
+let rec determine_boxing exp_for_check var_list = match exp_for_check with
+  | Set'(VarParam (variable,indx), value) -> if (List.mem variable var_list) 
+                                            then BoxSet'(VarParam (variable,indx), (determine_boxing value var_list)) 
+                                             else Set'(VarParam (variable,indx), (determine_boxing value var_list))
+  | Set'(VarBound (variable,level,index), value) -> if (List.mem variable  var_list) 
+                                                    then BoxSet'(VarBound (variable,level,index), (determine_boxing value var_list)) 
+                                                    else Set'(VarBound (variable,level,index), (determine_boxing value var_list))
+  | Var'(VarParam (variable,indx)) -> if (List.mem variable var_list)
+                                      then BoxGet'(VarParam (variable,indx)) 
+                                      else exp_for_check
+  | Var'(VarBound (variable,level,index)) -> if (List.mem variable var_list)
+                                            then BoxGet'(VarBound (variable,level,index)) 
+                                            else exp_for_check
+  | Var'(VarFree(variable)) -> if (List.mem variable var_list)
+                              then BoxGet'(VarFree(variable)) 
+                              else exp_for_check
+  | LambdaSimple'(params, body) -> LambdaSimple'(params, (check_body_for_boxing body params var_list))
+  | LambdaOpt'(params, opt_param, body) -> LambdaOpt'(params, opt_param, (check_body_for_boxing body (List.append params [opt_param]) var_list))
+  | Applic'(expression, args) -> Applic'((determine_boxing expression var_list), (determine_boxing_list args var_list))
+  | ApplicTP'(expression, args) -> ApplicTP'((determine_boxing expression var_list), (determine_boxing_list args var_list))
+  | If'(test, dit, dif) -> If'((determine_boxing test var_list), (determine_boxing dit var_list), (determine_boxing dif var_list))
+  | Def'(variable, value) -> Def'(variable, (determine_boxing value var_list))
+  | Seq'(exp_list) -> Seq'(determine_boxing_list exp_list var_list)
+  | Or'(exp_list) -> Or'(determine_boxing_list exp_list var_list)
+  | _ -> exp_for_check
+
+(* Map determine_boxing on every list element *)
+and determine_boxing_list exp_list var_list = List.map (fun item -> determine_boxing item var_list) exp_list
+
+and check_body_for_boxing body params var_list = 
+  let marked_params_for_boxing = check_each_param_for_boxing params body in
+  (* let merged_var_list = remove_duplicates (List.append marked_params_for_boxing var_list) in *)
+  (* let merged_var_list = remove_duplicates (List.append marked_params_for_boxing var_list) in *)
+
+  (* let boxed_body = determine_boxing body merged_var_list in *)
+  let boxed_body = determine_boxing body var_list in 
+  if (any_param_for_boxing marked_params_for_boxing) then (create_seq marked_params_for_boxing boxed_body) else boxed_body;;
+
+let box_set e = determine_boxing e [];;
+
+
+  let run_semantics expr =
+    box_set
+      (annotate_tail_calls
+         (annotate_lexical_addresses expr));;
 end;; (* struct Semantics *)
-
-
