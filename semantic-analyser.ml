@@ -73,6 +73,11 @@ let index_of x lst =
     | car::cdr -> if (String.equal car x) then count else (f x cdr (count+1))
   in
   f x lst 0;;
+  (*given number num return list of [1,2,3,....,num]*)
+  let rec list_all_nums_befor num = 
+    match num with
+    | 0 -> []
+    | _ -> (list_all_nums_befor (num-1))@[(num-1)] 
 
 (* vars is list of variables(string) list 
     orderd by leftmost is current lexical env, each hop to the right meand on lex above*)
@@ -117,7 +122,6 @@ and ann_var v var_list =
   (* ---------------------- *)
   (* Q3.3 *)
   (* ---------------------- *)
-  
   (* changes all calls is tail position from Applic' -> ApplicTP' *)
   let rec change_to_tp in_tp e = 
     let split_last = fun (l) -> ((List.rev (List.tl (List.rev l))),(List.hd (List.rev l))) in
@@ -138,250 +142,260 @@ and ann_var v var_list =
   
 
 (* ---------------------- *)
+  (* Q3.4 *)
+(* ---------------------- *)
 
-let box_check param body =
-  let rec bound_check param body =
-    match body with
-    | Var' (VarBound (par, _, _)) -> par=param
-    | Def' (e1, e2) -> bound_check param (Var'(e1)) || bound_check param e2
-    | If' (pred, dit, dif) -> bound_check param pred || bound_check param dit || bound_check param dif
-    | Seq' lst -> ormap (bound_check param) lst
-    | Set' (var, expr) -> bound_check param (Var'(var)) || bound_check param expr
-    | BoxSet' (_, expr) -> bound_check param expr
-    | Or' lst -> ormap (bound_check param) lst
-    | Applic' (op, args) | ApplicTP' (op, args) -> bound_check param op || ormap (fun e -> bound_check param e) args
-    | LambdaSimple' (params, body) -> if (List.exists (fun e -> e = param) params)
-                                      then false
-                                      else bound_check param body
-    | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
-                                       then false
-                                       else bound_check param body
-    | _ -> false in
 
-  let rec set_check param body =
-    match body with
-    | If' (pred, dit, dif) -> set_check param pred || set_check param dit || set_check param dif
-    | Def' (e1, e2) -> set_check param (Var'(e1)) || set_check param e2
-    | Seq' lst -> ormap (set_check param) lst
-    | Set' (VarBound (par, _, _), expr) -> par = param || set_check param expr
-    | Set' (VarParam (par, _), expr) -> par = param || set_check param expr
-    | Set' (var, expr) -> set_check param (Var'(var)) || set_check param expr
-    | BoxSet' (_, expr) -> set_check param expr
-    | Or' lst -> ormap (set_check param) lst
-    | Applic' (op, args) | ApplicTP' (op, args) -> set_check param op || ormap (fun e -> set_check param e) args
-    | LambdaSimple' (params, body) ->if (List.exists (fun e -> e = param) params)
+(* return true if we need to do boxing to parameter "param"*)
+let  rec need_boxing param body =
+  (has_read_occ param body) && (has_write_occ param body)&& (has_bound_var param body) 
+
+  and has_read_occ param body =
+  match body with
+  (*we have read occ of param if we have Var'(param) *)
+  | Var' (VarBound(name, level, index))-> if(name = param) then true else false
+  | Var' (VarParam (name, index)) -> if(name = param) then true else false
+  
+  | Set' (VarBound(name, level, index), expr) -> if(name = param) then true else false
+  | Set' (VarParam (name, index), expr) ->if(name = param) then true else false
+
+  | Def' (variable, value) -> has_read_occ param (Var'(variable)) || has_read_occ param value
+  | If' (test, dit, dif) -> has_read_occ param test || has_read_occ param dit || has_read_occ param dif
+  | Seq' expr_list -> ormap (has_read_occ param) expr_list
+  | Set' (var, expr) -> has_read_occ param (Var'(var)) || has_read_occ param expr
+  | BoxSet' (_, expr) -> has_read_occ param expr
+  | Or' lst -> ormap (has_read_occ param) lst
+  | Applic' (op, args) -> has_read_occ param op || ormap (fun e -> has_read_occ param e) args
+  | ApplicTP' (op, args) -> has_read_occ param op || ormap (fun e -> has_read_occ param e) args
+
+  | LambdaSimple' (params, body) -> if (List.exists (fun e -> e = param) params)
                                     then false
-                                    else set_check param body
-    | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
-then false
-else set_check param body
-| _ -> false in
+                                    else has_read_occ param body
+  | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
+                                      then false
+                                      else has_read_occ param body
+  | _ -> false 
 
-  let rec get_check param body =
+
+
+and has_write_occ param body =
+  match body with
+  | Set' (VarBound (par, index, _), expr) -> par = param || has_write_occ param expr
+  | Set' (VarParam (par, index), expr) -> par = param || has_write_occ param expr
+  | Set' (VarFree(var), expr) -> has_write_occ param (Var'(VarFree(var))) || has_write_occ param expr
+
+  | If' (test, dit, dif) -> has_write_occ param test || has_write_occ param dit || has_write_occ param dif
+  | Def' (e1, e2) -> has_write_occ param (Var'(e1)) || has_write_occ param e2
+  | Seq' lst -> ormap (has_write_occ param) lst
+  | BoxSet' (var, expr) -> has_write_occ param expr
+  | Or' lst -> ormap (has_write_occ param) lst
+  | Applic' (op, args) | ApplicTP' (op, args) -> has_write_occ param op || ormap (fun e -> has_write_occ param e) args
+  | LambdaSimple' (params, body) ->if (List.exists (fun e -> e = param) params)
+                                  then false
+                                  else has_write_occ param body
+  | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
+                                then false
+                                else has_write_occ param body
+|  _ -> false
+
+and has_bound_var param body =
+  match body with
+  | Var' (VarBound(name, level, index))-> if(name = param) then true else false
+  | Def' (e1, e2) -> has_bound_var param (Var'(e1)) || has_bound_var param e2
+  | If' (test, dit, dif) -> has_bound_var param test || has_bound_var param dit || has_bound_var param dif
+  | Seq' lst -> ormap (has_bound_var param) lst
+  | Set' (var, expr) -> has_bound_var param (Var'(var)) || has_bound_var param expr
+  | BoxSet' (_, expr) -> has_bound_var param expr
+  | Or' lst -> ormap (has_bound_var param) lst
+  | Applic' (op, args) ->has_bound_var param op || ormap (fun e -> has_bound_var param e) args
+  | ApplicTP' (op, args) -> has_bound_var param op || ormap (fun e -> has_bound_var param e) args
+  | LambdaSimple' (params, body) -> if (List.exists (fun e -> e = param) params)
+                                    then false
+                                    else has_bound_var param body
+  | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
+                                     then false
+                                     else has_bound_var param body
+  | _ -> false
+
+(*Replace any get-occurances of v with BoxGet'*)
+  let rec replace_get_occ param body =
     match body with
-    | Var' (VarBound (par, _, _)) | Var' (VarParam (par, _)) -> par = param
-    | Def' (e1, e2) -> get_check param (Var'(e1)) || get_check param e2
-    | If' (pred, dit, dif) -> get_check param pred || get_check param dit || get_check param dif
-    | Seq' lst -> ormap (get_check param) lst
-    | Set' (VarBound (par, _, _), expr) | Set' (VarParam (par, _), expr) -> par = param
-    | Set' (var, expr) -> get_check param (Var'(var)) || get_check param expr
-    | BoxSet' (_, expr) -> get_check param expr
-    | Or' lst -> ormap (get_check param) lst
-    | Applic' (op, args) | ApplicTP' (op, args) -> get_check param op || ormap (fun e -> get_check param e) args
+    | Const' _ | Var' _ | BoxGet' _ | Box' _ -> body
+    | BoxSet' (var, expr) -> BoxSet' (var, replace_get_occ param expr)
+    | If' (pred, dit, dif) -> If' (replace_get_occ param pred, replace_get_occ param dit, replace_get_occ param dif)
+          | Seq' lst -> Seq' (List.map (replace_get_occ param) lst)
+
+    | Def' (VarBound (par, n1, n2), e2) -> 
+    let test= replace_get_occ param (Var'(VarBound (par, n1, n2))) in
+    (match test with
+    | Var'(VarBound (e, n1, n2))-> Def' (VarBound (e, n1, n2), replace_get_occ param e2)
+    | _ -> raise X_this_should_not_happen )
+
+    | Def' (VarParam (par, n1), e2) -> 
+    let test= replace_get_occ param (Var'(VarParam (par, n1))) in
+    (match test with
+    | Var'(VarParam (e, n1))-> Def' (VarParam (e, n1), replace_get_occ param e2)
+    | _ -> raise X_this_should_not_happen )
+    
+    | Set' ((VarBound (p, n1, n2)), expr) ->
+      if (p = param)
+      then BoxSet' (VarBound (param, n1, n2), replace_get_occ param expr)
+      else Set' (VarBound (p, n1, n2), replace_get_occ param expr)
+    | Set' (VarParam (p, n1), expr) ->
+    if (p = param)
+    then BoxSet' (VarParam (param, n1), replace_get_occ param expr)
+    else Set' (VarParam (p, n1), replace_get_occ param expr)
+    | Set' (VarFree var, expr) -> Set' (VarFree var, replace_get_occ param expr)
+    | Or' lst -> Or' (List.map (replace_get_occ param) lst)
+    | Applic'	(op, args) -> Applic'	(replace_get_occ param op, List.map (replace_get_occ param) args)
+    | ApplicTP' (op, args) -> ApplicTP' (replace_get_occ param op, List.map (replace_get_occ param) args)
     | LambdaSimple' (params, body) ->
-if (List.exists (fun e -> e = param) params)
-then false
-else get_check param body
-    | LambdaOpt' (params, opt, body) ->
-if (List.exists (fun e -> e = param) (opt::params))
-then false
-else get_check param body
-    | _ -> false in
-
-  (bound_check param body) && (set_check param body) && (get_check param body)
-
-  let box_exp param min body =
-    let rec add_set_exp param min body =
-      match body with
-      | Seq' list -> Seq' ([Set' (VarParam (param, min), Box' (VarParam (param, min)))]@list)
-      | _ -> Seq' [Set' (VarParam (param, min), Box' (VarParam (param, min))); body] in
-
-    let rec replace_set param body =
-      match body with
-      | Const' _ | Var' _ | BoxGet' _ | Box' _ -> body
-      | BoxSet' (var, expr) -> BoxSet' (var, replace_set param expr)
-      | If' (pred, dit, dif) -> If' (replace_set param pred, replace_set param dit, replace_set param dif)
-            | Seq' lst -> Seq' (List.map (replace_set param) lst)
-
-      | Def' (VarBound (par, n1, n2), e2) -> 
-      let test= replace_set param (Var'(VarBound (par, n1, n2))) in
-      (match test with
-      | Var'(VarBound (e, n1, n2))-> Def' (VarBound (e, n1, n2), replace_set param e2)
-      | _ -> raise X_this_should_not_happen )
-
-      | Def' (VarParam (par, n1), e2) -> 
-      let test= replace_set param (Var'(VarParam (par, n1))) in
-      (match test with
-      | Var'(VarParam (e, n1))-> Def' (VarParam (e, n1), replace_set param e2)
-      | _ -> raise X_this_should_not_happen )
-      
-      | Set' ((VarBound (p, n1, n2)), expr) ->
-	      if (p = param)
-	      then BoxSet' (VarBound (param, n1, n2), replace_set param expr)
-	      else Set' (VarBound (p, n1, n2), replace_set param expr)
-      | Set' (VarParam (p, n1), expr) ->
-	    if (p = param)
-    	then BoxSet' (VarParam (param, n1), replace_set param expr)
-	    else Set' (VarParam (p, n1), replace_set param expr)
-      | Set' (VarFree var, expr) -> Set' (VarFree var, replace_set param expr)
-      | Or' lst -> Or' (List.map (replace_set param) lst)
-      | Applic'	(op, args) -> Applic'	(replace_set param op, List.map (replace_set param) args)
-      | ApplicTP' (op, args) -> ApplicTP' (replace_set param op, List.map (replace_set param) args)
-      | LambdaSimple' (params, body) ->
-        if (List.exists (fun e -> e = param) params)
-        then LambdaSimple' (params, body)
-        else LambdaSimple' (params, replace_set param body)
-            | LambdaOpt' (params, opt, body) ->
-        if (List.exists (fun e -> e = param) (opt::params))
-        then LambdaOpt' (params, opt, body)
-        else LambdaOpt' (params, opt, replace_set param body)
-            | _ -> raise X_this_should_not_happen in
-
-    let rec replace_get param body =
-      match body with
-      | Var' (VarBound (par, n1, n2)) ->
-          if (par = param)
-          then BoxGet' (VarBound (param, n1, n2))
-          else body
-              | Var' (VarParam (par, n1)) ->
-          if (par = param)
-          then BoxGet' (VarParam (param, n1))
-          else body
-      | Const' _ | Var' _ | BoxGet' _ | Box' _ -> body
-      | BoxSet' (var, expr) -> BoxSet' (var, replace_get param expr)
-      | If' (pred, dit, dif) -> If' (replace_get param pred, replace_get param dit, replace_get param dif)
-     
-      | Def' (VarBound (par, n1, n2), e2) ->
-       let test= replace_get param (Var'(VarBound (par, n1, n2))) in
-        (match test with
-        | Var'(VarBound (e, n1, n2))-> Def' (VarBound (e, n1, n2), replace_get param e2)
-        | _ -> raise X_this_should_not_happen )
-     
-      | Def' (VarParam (par, n1), e2) ->
-      let test= replace_get param (Var'(VarParam (par, n1))) in
-        (match test with
-        | Var'(VarParam (e, n1))-> Def' (VarParam (e, n1), replace_get param e2)
-        | _ -> raise X_this_should_not_happen )
- 
-      | Seq' lst -> Seq' (List.map (fun e -> replace_get param e) lst)
-      | Set' (VarBound (par, n1, n2), expr) ->
-	        if (par = param)
-          then Set' (VarBound (param, n1, n2), replace_get param expr) 
-          else 
-          let temp= replace_get param (Var' (VarBound (par, n1, n2))) in
-         ( match temp with
-          | Var'(VarBound (par, n1, n2))->Set' (VarBound (par, n1, n2), replace_get param expr) 
-          |_ -> raise X_this_should_not_happen 
-         )
-      | Set' (VarParam (par, n1), expr) ->
-          if (par = param)
-          then Set' (VarParam (param, n1), replace_get param expr) 
-          else 
-          let temp= replace_get param (Var' (VarParam (par, n1))) in
-        ( match temp with
-          | Var'(VarParam (par, n1))->Set' (VarParam (par, n1), replace_get param expr) 
-          |_ -> raise X_this_should_not_happen 
-        )
-      | Set' (VarFree (var), expr) -> Set' (VarFree (var), replace_get param expr)
-      | Or' lst -> Or' (List.map (fun e -> replace_get param e) lst)
-      | Applic' (op, args) ->		Applic'   (replace_get param op, List.map (fun e -> replace_get param e) args)
-      | ApplicTP' (op, args) ->	ApplicTP' (replace_get param op, List.map (fun e -> replace_get param e) args)
-      | LambdaSimple' (params, body) ->
       if (List.exists (fun e -> e = param) params)
       then LambdaSimple' (params, body)
-      else LambdaSimple' (params, replace_get param body)
+      else LambdaSimple' (params, replace_get_occ param body)
           | LambdaOpt' (params, opt, body) ->
       if (List.exists (fun e -> e = param) (opt::params))
       then LambdaOpt' (params, opt, body)
-      else LambdaOpt' (params, opt, replace_get param body)
-          | _ -> raise X_this_should_not_happen in
-
-    let body = replace_get param body in
-    let body = replace_set param body in
-    add_set_exp param min body;;
+      else LambdaOpt' (params, opt, replace_get_occ param body)
+          | _ -> raise X_this_should_not_happen 
 
 
-
-let box params body =
-  let foldfunc (param, min) body =
-    if (box_check param body)
-    then (box_exp param min body)
-    else body in
-  let rec inds = function
-    | 0 -> []
-    | n -> (inds (n-1))@[(n-1)] in
-  let params = List.combine params (inds (List.length params)) in
-  List.fold_right foldfunc params body;;
-  let box_set2 e = determine_boxing e [];;
+let rec replace_get param body =
+  match body with
+  | Var' (VarBound (par, n1, n2)) ->
+      if (par = param)
+      then BoxGet' (VarBound (param, n1, n2))
+      else body
+          | Var' (VarParam (par, n1)) ->
+      if (par = param)
+      then BoxGet' (VarParam (param, n1))
+      else body
+  | Const' _ | Var' _ | BoxGet' _ | Box' _ -> body
+  | BoxSet' (var, expr) -> BoxSet' (var, replace_get param expr)
+  | If' (pred, dit, dif) -> If' (replace_get param pred, replace_get param dit, replace_get param dif)
   
-  let box_set e =
-    let rec extract_body exp =
-      match exp with
-      | Const' _ | Var' _ | Box' _ | BoxGet' _ -> exp
-      | BoxSet' (var, expr) -> BoxSet' (var, extract_body expr)
+  | Def' (VarBound (par, n1, n2), e2) ->
+    let test= replace_get param (Var'(VarBound (par, n1, n2))) in
+    (match test with
+    | Var'(VarBound (e, n1, n2))-> Def' (VarBound (e, n1, n2), replace_get param e2)
+    | _ -> raise X_this_should_not_happen )
+  
+  | Def' (VarParam (par, n1), e2) ->
+  let test= replace_get param (Var'(VarParam (par, n1))) in
+    (match test with
+    | Var'(VarParam (e, n1))-> Def' (VarParam (e, n1), replace_get param e2)
+    | _ -> raise X_this_should_not_happen )
 
-      | Def' (VarBound (par, n1, n2), e2) -> 
-        let test= extract_body  (Var'(VarBound (par, n1, n2))) in
-        (match test with
-          | Var'(VarBound (e, n1, n2))-> Def' (VarBound (e, n1, n2), extract_body  e2)
-            | _ -> raise X_this_should_not_happen )
-      
-      | Def' (VarParam (par, n1), e2) -> 
-        let test= extract_body  (Var'(VarParam (par, n1))) in
-        (match test with
-          | Var'(VarParam (e, n1))-> Def' (VarParam (e, n1), extract_body  e2)
-          | _ -> raise X_this_should_not_happen )
-      
-      | Def' (VarFree (var), e2) -> 
-        let test= extract_body  (Var'(VarFree (var))) in
-        (match test with
-          | Var'(VarFree (var))-> Def' (VarFree (var), extract_body  e2)
-          | _ -> raise X_this_should_not_happen )
-      
-      | If' (pred, dit, dif) -> If' (extract_body pred, extract_body dit, extract_body dif)
-      | Seq' lst -> Seq' (List.map extract_body lst)
-      
-      | Set'(VarParam (variable,indx), e2) -> 
-        let test= extract_body  (Var'(VarParam (variable,indx))) in
-        (match test with
-          | Var'(VarParam (e, n1))-> Set' (VarParam (e, n1), extract_body  e2)
-          | _ -> raise X_this_should_not_happen )
+  | Seq' lst -> Seq' (List.map (fun e -> replace_get param e) lst)
+  | Set' (VarBound (par, n1, n2), expr) ->
+      if (par = param)
+      then Set' (VarBound (param, n1, n2), replace_get param expr) 
+      else 
+      let temp= replace_get param (Var' (VarBound (par, n1, n2))) in
+      ( match temp with
+      | Var'(VarBound (par, n1, n2))->Set' (VarBound (par, n1, n2), replace_get param expr) 
+      |_ -> raise X_this_should_not_happen 
+      )
+  | Set' (VarParam (par, n1), expr) ->
+      if (par = param)
+      then Set' (VarParam (param, n1), replace_get param expr) 
+      else 
+      let temp= replace_get param (Var' (VarParam (par, n1))) in
+    ( match temp with
+      | Var'(VarParam (par, n1))->Set' (VarParam (par, n1), replace_get param expr) 
+      |_ -> raise X_this_should_not_happen 
+    )
+  | Set' (VarFree (var), expr) -> Set' (VarFree (var), replace_get param expr)
+  | Or' lst -> Or' (List.map (fun e -> replace_get param e) lst)
+  | Applic' (op, args) ->		Applic'   (replace_get param op, List.map (fun e -> replace_get param e) args)
+  | ApplicTP' (op, args) ->	ApplicTP' (replace_get param op, List.map (fun e -> replace_get param e) args)
+  | LambdaSimple' (params, body) ->
+  if (List.exists (fun e -> e = param) params)
+  then LambdaSimple' (params, body)
+  else LambdaSimple' (params, replace_get param body)
+      | LambdaOpt' (params, opt, body) ->
+  if (List.exists (fun e -> e = param) (opt::params))
+  then LambdaOpt' (params, opt, body)
+  else LambdaOpt' (params, opt, replace_get param body)
+      | _ -> raise X_this_should_not_happen
 
-      | Set'(VarBound (par, n1, n2), e2)->
-        let test= extract_body  (Var'(VarBound (par, n1, n2))) in
-        (match test with
-          | Var'(VarBound (e, n1, n2))-> Set' (VarBound (e, n1, n2), extract_body  e2)
-          | _ -> raise X_this_should_not_happen )
+  let box_param param min body =
+    let clean_body = replace_get param body in
+    let clean_body = replace_get_occ param clean_body in
+    match clean_body with
+    | Seq' list -> Seq' ([Set' (VarParam (param, min), Box' (VarParam (param, min)))]@list)
+    | _ -> Seq' [Set' (VarParam (param, min), Box' (VarParam (param, min))); body] ;;
 
-      | Set'(VarFree (par), e2)->
-      let test= extract_body  (Var'(VarFree (par))) in
-      (match test with
-        | Var'(VarFree (e))-> Set' (VarFree (e), extract_body  e2)
+
+let foldfunc (param, min) body =
+    if (need_boxing param body)
+    then (box_param param min body)
+    else body;;
+
+let apply_box_on_lambda params body =
+  (* comine paran with it's index *)
+  let params = List.combine params (list_all_nums_befor (List.length params)) in
+  List.fold_right foldfunc params body;;
+  
+
+let rec check_for_lambdas exp =
+  match exp with
+  | BoxSet' (var, expr) -> BoxSet' (var, check_for_lambdas expr)
+
+  | Def' (VarBound(name, level, index), e2) -> 
+    let test= check_for_lambdas  (Var'(VarBound(name, level, index))) in
+    (match test with
+      | Var'(VarBound(name, level, index))-> Def' (VarBound(name, level, index), check_for_lambdas  e2)
         | _ -> raise X_this_should_not_happen )
   
-      | Or' lst -> Or' (List.map extract_body lst)
-      | Applic' (op, args) -> Applic' (extract_body op, List.map extract_body args)
-      | ApplicTP' (op, args) -> ApplicTP' (extract_body op, List.map extract_body args)
-      | LambdaSimple' (params, body) -> LambdaSimple' (params, extract_body (box params body))
-      | LambdaOpt' (params, opt, body) -> LambdaOpt' (params, opt, extract_body (box (opt::params) body)) in
-    extract_body e;;  
+  | Def' (VarParam(name, index), e2) -> 
+    let test= check_for_lambdas  (Var'(VarParam(name, index))) in
+    (match test with
+      | Var'(VarParam(name, index))-> Def' (VarParam(name, index), check_for_lambdas  e2)
+      | _ -> raise X_this_should_not_happen )
+  
+  | Def' (VarFree (var), e2) -> 
+    let test= check_for_lambdas  (Var'(VarFree (var))) in
+    (match test with
+      | Var'(VarFree (var))-> Def' (VarFree (var), check_for_lambdas  e2)
+      | _ -> raise X_this_should_not_happen )
+  
+  | If' (pred, dit, dif) -> If' (check_for_lambdas pred, check_for_lambdas dit, check_for_lambdas dif)
+  | Seq' lst -> Seq' (List.map check_for_lambdas lst)
+  
+  | Set'(VarParam (variable,indx), e2) -> 
+    let test= check_for_lambdas  (Var'(VarParam (variable,indx))) in
+    (match test with
+      | Var'(VarParam (e, n1))-> Set' (VarParam (e, n1), check_for_lambdas  e2)
+      | _ -> raise X_this_should_not_happen )
 
+  | Set'(VarBound (par, n1, n2), e2)->
+    let test= check_for_lambdas  (Var'(VarBound (par, n1, n2))) in
+    (match test with
+      | Var'(VarBound (e, n1, n2))-> Set' (VarBound (e, n1, n2), check_for_lambdas  e2)
+      | _ -> raise X_this_should_not_happen )
 
+  | Set'(VarFree (par), e2)-> 
+    let test= check_for_lambdas  (Var'(VarFree (par))) in
+    (match test with
+      | Var'(VarFree (e))-> Set' (VarFree (e), check_for_lambdas  e2)
+      | _ -> raise X_this_should_not_happen )
 
+  | Or' lst -> Or' (List.map check_for_lambdas lst)
+  | Applic' (op, args) -> Applic' (check_for_lambdas op, List.map check_for_lambdas args)
+  | ApplicTP' (op, args) -> ApplicTP' (check_for_lambdas op, List.map check_for_lambdas args)
+  
+  | LambdaSimple' (params, body) -> LambdaSimple' (params, check_for_lambdas (apply_box_on_lambda params body))
+  | LambdaOpt' (params, opt, body) -> LambdaOpt' (params, opt, check_for_lambdas (apply_box_on_lambda (opt::params) body))
+  |_-> exp
+  ;;
+    
+let box_set e = check_for_lambdas e;;
+   
 
-    let run_semantics expr =
-      box_set
-        (annotate_tail_calls
-           (annotate_lexical_addresses expr));;
-           end;; (* struct Semantics *)
+ let run_semantics expr =
+    box_set
+    (annotate_tail_calls
+    (annotate_lexical_addresses expr));;
+  end;; (* struct Semantics *)
     
