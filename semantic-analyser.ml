@@ -269,26 +269,6 @@ and count_param_reading_occurrences param body count = match body with
                                     else (if ((count_param_reading_occurrences param b (count+1)) = []) then [] else [count])
 | _ -> []
 
-and has_bound_var param body =
-  match body with
-  | Var' (VarBound(name, level, index))-> if(name = param) then true else false
-  | Def' (e1, e2) -> has_bound_var param (Var'(e1)) || has_bound_var param e2
-  | If' (test, dit, dif) -> has_bound_var param test || has_bound_var param dit || has_bound_var param dif
-  | Seq' lst -> ormap (has_bound_var param) lst
-  | Set' (var, expr) -> has_bound_var param (Var'(var)) || has_bound_var param expr
-  | BoxSet' (_, expr) -> has_bound_var param expr
-  | Or' lst -> ormap (has_bound_var param) lst
-  | Applic' (op, args) ->has_bound_var param op || ormap (fun e -> has_bound_var param e) args
-  | ApplicTP' (op, args) -> has_bound_var param op || ormap (fun e -> has_bound_var param e) args
-  | LambdaSimple' (params, body) -> if (List.exists (fun e -> e = param) params)
-                                    then false
-                                    else has_bound_var param body
-  | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
-                                     then false
-                                     else has_bound_var param body
-  | _ -> false
-
-
 (* Replace any set-occurances of v with BoxGet' *)
 let rec replace_set_occ param body =
   match body with
