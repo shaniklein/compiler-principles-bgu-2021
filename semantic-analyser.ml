@@ -148,34 +148,9 @@ and ann_var v var_list =
 let  rec need_boxing param body =
   let reading_occurences = count_param_reading_occurrences param body 0 in
   let writing_occurences = count_param_writing_occurrences param body 0 in
-  let matched=boxing_criterias_are_met  reading_occurences writing_occurences in
-  matched && (has_read_occ param body) && (has_write_occ param body)
+  let matched=different_ribs reading_occurences writing_occurences in
+   matched
 
-  and has_read_occ param body =
-  match body with
-  (*we have read occ of param if we have Var'(param) *)
-  | Var' (VarBound(name, level, index))-> if(name = param) then true else false
-  | Var' (VarParam (name, index)) -> if(name = param) then true else false
-  
-  | Set' (VarBound(name, level, index), expr) -> if(name = param) then true else false
-  | Set' (VarParam (name, index), expr) ->if(name = param) then true else false
-
-  | Def' (variable, value) -> has_read_occ param (Var'(variable)) || has_read_occ param value
-  | If' (test, dit, dif) -> has_read_occ param test || has_read_occ param dit || has_read_occ param dif
-  | Seq' expr_list -> ormap (has_read_occ param) expr_list
-  | Set' (var, expr) -> has_read_occ param (Var'(var)) || has_read_occ param expr
-  | BoxSet' (_, expr) -> has_read_occ param expr
-  | Or' lst -> ormap (has_read_occ param) lst
-  | Applic' (op, args) -> has_read_occ param op || ormap (fun e -> has_read_occ param e) args
-  | ApplicTP' (op, args) -> has_read_occ param op || ormap (fun e -> has_read_occ param e) args
-
-  | LambdaSimple' (params, body) -> if (List.exists (fun e -> e = param) params)
-                                    then false
-                                    else has_read_occ param body
-  | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
-                                      then false
-                                      else has_read_occ param body
-  | _ -> false 
 
   and map_count_reading_occurences exp_list param count = match exp_list with
   | [] -> []
@@ -185,34 +160,15 @@ let  rec need_boxing param body =
   | [] -> []
   | first_exp::rest -> List.append (count_param_writing_occurrences param first_exp count) (map_count_writing_occurences rest param (count+1))
 
-  and match_write_occurance_with_read_occurances write_occur read_occurances = 
+  and check_rib write_occur read_occurances = 
     List.fold_left (fun matched read_occur -> (matched || (write_occur != read_occur))) false read_occurances
   
-  and boxing_criterias_are_met read_occurances write_occurances = match write_occurances with 
+  and different_ribs read_occurances write_occurances = match write_occurances with 
     | [] -> false
-    | write_occur::rest -> if(match_write_occurance_with_read_occurances write_occur read_occurances) 
+    | write_occur::rest -> if(check_rib write_occur read_occurances) 
                             then true
-                            else (boxing_criterias_are_met read_occurances rest)
+                            else (different_ribs read_occurances rest)
 
-and has_write_occ param body =
-  match body with
-  | Set' (VarBound (par, index, _), expr) -> par = param || has_write_occ param expr
-  | Set' (VarParam (par, index), expr) -> par = param || has_write_occ param expr
-  | Set' (VarFree(var), expr) -> has_write_occ param (Var'(VarFree(var))) || has_write_occ param expr
-
-  | If' (test, dit, dif) -> has_write_occ param test || has_write_occ param dit || has_write_occ param dif
-  | Def' (e1, e2) -> has_write_occ param (Var'(e1)) || has_write_occ param e2
-  | Seq' lst -> ormap (has_write_occ param) lst
-  | BoxSet' (var, expr) -> has_write_occ param expr
-  | Or' lst -> ormap (has_write_occ param) lst
-  | Applic' (op, args) | ApplicTP' (op, args) -> has_write_occ param op || ormap (fun e -> has_write_occ param e) args
-  | LambdaSimple' (params, body) ->if (List.exists (fun e -> e = param) params)
-                                  then false
-                                  else has_write_occ param body
-  | LambdaOpt' (params, opt, body) -> if (List.exists (fun e -> e = param) (opt::params))
-                                then false
-                                else has_write_occ param body
-|  _ -> false
 
 and count_param_writing_occurrences param body count = match body with
 | Const'(value) -> []
@@ -221,6 +177,8 @@ and count_param_writing_occurrences param body count = match body with
                                              (count_param_writing_occurrences param value (count+1))
 | Set'(VarBound (variable,level,index), value) -> List.append (if (variable = param) then [-1] else []) 
                                               (count_param_writing_occurrences param value (count+1))
+| Set'(VarFree (variable), value) -> List.append (if (variable = param) then [-1] else []) 
+                                      (count_param_writing_occurrences param value (count+1))
 | Applic'(expression, args) -> List.append (count_param_writing_occurrences param expression count) (map_count_writing_occurences args param count)
 | ApplicTP'(expression, args) -> List.append (count_param_writing_occurrences param expression count) (map_count_writing_occurences args param count)
 | Seq'(exp_list) -> map_count_writing_occurences exp_list param count
