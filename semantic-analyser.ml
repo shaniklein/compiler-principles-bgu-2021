@@ -419,8 +419,13 @@ let rec replace_get_occ param body =
   then (box_param param minor body)
   else body;;
 
+  let uniq_cons x xs = if List.mem x xs then xs else x :: xs
+
+  let remove_from_right xs = List.fold_right uniq_cons xs []
+  
 let apply_box_on_lambda params body =
   (* comine paran with it's index *)
+  let params= remove_from_right params in
   let params = List.combine params (list_all_nums_befor (List.length params)) in
   List.fold_right foldfunc params body;;
 
@@ -444,7 +449,7 @@ let rec check_for_lambdas exp =
   | ApplicTP' (op, args) -> ApplicTP' (check_for_lambdas op, List.map check_for_lambdas args)
   
   | LambdaSimple' (params, body) -> LambdaSimple' (params, check_for_lambdas (apply_box_on_lambda params body))
-  | LambdaOpt' (params, opt, body) -> LambdaOpt' (params, opt, check_for_lambdas (apply_box_on_lambda (opt::params) body))
+  | LambdaOpt' (params, opt, body) -> LambdaOpt' (params, opt, check_for_lambdas (apply_box_on_lambda (params@[opt]) body))
   |_-> exp
   ;;
     
