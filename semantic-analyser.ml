@@ -226,6 +226,7 @@ and count_param_reading_occurrences param body count = match body with
 | Var'(VarBound (variable,level,index)) -> if ( variable = param) then [-1] else []
 | Var'(VarFree (variable)) -> if ( variable = param) then [-1] else []
 | Set'(variable, value) -> (count_param_reading_occurrences param value (count+1))
+| BoxSet'(variable,value) -> if (count_param_reading_occurrences param value (count+1)= []) then [] else [count]
 | Applic'(expression, args) -> List.append (count_param_reading_occurrences param expression count) (map_count_reading_occurences args param count)
 | ApplicTP'(expression, args) -> List.append (count_param_reading_occurrences param expression count) (map_count_reading_occurences args param count)
 | Seq'(exp_list) -> map_count_reading_occurences exp_list param count
@@ -320,17 +321,8 @@ let rec replace_set_occ param body =
   | If' (pred, dit, dif) -> If' (replace_set_occ param pred, replace_set_occ param dit, replace_set_occ param dif)
         | Seq' lst -> Seq' (List.map (replace_set_occ param) lst)
 
-  | Def' (VarBound (par, n1, n2), e2) -> 
-  let test= replace_set_occ param (Var'(VarBound (par, n1, n2))) in
-  (match test with
-  | Var'(VarBound (e, n1, n2))-> Def' (VarBound (e, n1, n2), replace_set_occ param e2)
-  | _ -> raise X_this_should_not_happen )
-
-  | Def' (VarParam (par, n1), e2) -> 
-  let test= replace_set_occ param (Var'(VarParam (par, n1))) in
-  (match test with
-  | Var'(VarParam (e, n1))-> Def' (VarParam (e, n1), replace_set_occ param e2)
-  | _ -> raise X_this_should_not_happen )
+  | Def' (VarBound (par, n1, n2), e2) ->  Def' (VarBound (par, n1, n2), replace_set_occ param e2)
+  | Def' (VarParam (par, n1), e2) -> Def' (VarParam (par, n1), replace_set_occ param e2)
   
   | Set' ((VarBound (p, n1, n2)), expr) ->
     if (p = param)
@@ -422,11 +414,11 @@ let rec replace_get_occ param body =
     | _ -> Seq' [Set' (VarParam (param, min), Box' (VarParam (param, min))); body] ;;
 
 
-let foldfunc (param, minor) body =
-    if (need_boxing param body)
-    then (box_param param minor body)
-    else body;;
-    
+  let foldfunc (param, minor) body =
+  if (need_boxing param body)
+  then (box_param param minor body)
+  else body;;
+
 let apply_box_on_lambda params body =
   (* comine paran with it's index *)
   let params = List.combine params (list_all_nums_befor (List.length params)) in
@@ -463,4 +455,3 @@ let box_set e = check_for_lambdas e;;
     (annotate_tail_calls
     (annotate_lexical_addresses expr));;
   end;; (* struct Semantics *)
-  
