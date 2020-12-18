@@ -254,6 +254,7 @@ and is_read_occ param body=
   | Var' (VarParam (name, index)) -> if(name = param) then true else false
   | Var' (VarFree(name))->if(name = param) then true else false
   | Set' (var,exp)-> is_read_occ param exp  
+  | Applic' (op, args) -> is_read_occ param op || ormap (fun e -> is_read_occ param e) args
   |_->false
 
 and is_write_occ param body=
@@ -264,6 +265,7 @@ and is_write_occ param body=
   | Def' (VarBound(name, level, index), expr) -> if(name = param) then true else false
   | Def' (VarParam (name, index), expr) ->if(name = param) then true else false
   | Def' (VarFree(name), expr) -> if(name = param) then true else false
+  | Applic' (op, args) -> is_write_occ param op || ormap (fun e -> is_write_occ param e) args
   |_->false
 
 and has_read_occ param body =  match body with 
@@ -271,11 +273,6 @@ and has_read_occ param body =  match body with
   | Var' (VarBound(name, level, index))-> if(name = param) then true else false
   | Var' (VarParam (name, index)) -> if(name = param) then true else false
   | Var' (VarFree(name)) -> if(name = param) then true else false
-
-  (* | Set' (VarBound(name, level, index), expr) -> if(name = param) then true else false
-  | Set' (VarParam (name, index), expr) ->if(name = param) then true else false
-  | Set' (VarFree(name), expr) -> if(name = param) then true else false *)
-
   | Def' (variable, value) -> has_read_occ param (Var'(variable)) || has_read_occ param value
   | If' (test, dit, dif) -> has_read_occ param test || has_read_occ param dit || has_read_occ param dif
   | Seq' expr_list -> ormap (has_read_occ param) expr_list
