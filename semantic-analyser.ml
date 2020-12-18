@@ -226,6 +226,7 @@ and count_param_reading_occurrences param body count = match body with
 | Var'(VarBound (variable,level,index)) -> if ( variable = param) then [-1] else []
 | Var'(VarFree (variable)) -> if ( variable = param) then [-1] else []
 | Set'(variable, value) -> (count_param_reading_occurrences param value (count+1))
+| BoxSet'(variable,value) -> if (count_param_reading_occurrences param value (count+1)= []) then [] else [count]
 | Applic'(expression, args) -> List.append (count_param_reading_occurrences param expression count) (map_count_reading_occurences args param count)
 | ApplicTP'(expression, args) -> List.append (count_param_reading_occurrences param expression count) (map_count_reading_occurences args param count)
 | Seq'(exp_list) -> map_count_reading_occurences exp_list param count
@@ -253,6 +254,7 @@ and is_read_occ param body=
   | Var' (VarParam (name, index)) -> if(name = param) then true else false
   | Var' (VarFree(name))->if(name = param) then true else false
   | Set' (var,exp)-> is_read_occ param exp  
+  | Applic' (op, args) -> is_read_occ param op || ormap (fun e -> is_read_occ param e) args
   |_->false
 
 and is_write_occ param body=
@@ -263,6 +265,7 @@ and is_write_occ param body=
   | Def' (VarBound(name, level, index), expr) -> if(name = param) then true else false
   | Def' (VarParam (name, index), expr) ->if(name = param) then true else false
   | Def' (VarFree(name), expr) -> if(name = param) then true else false
+  | Applic' (op, args) -> is_write_occ param op || ormap (fun e -> is_write_occ param e) args
   |_->false
 
 and has_read_occ param body =  match body with 
@@ -270,11 +273,6 @@ and has_read_occ param body =  match body with
   | Var' (VarBound(name, level, index))-> if(name = param) then true else false
   | Var' (VarParam (name, index)) -> if(name = param) then true else false
   | Var' (VarFree(name)) -> if(name = param) then true else false
-
-  (* | Set' (VarBound(name, level, index), expr) -> if(name = param) then true else false
-  | Set' (VarParam (name, index), expr) ->if(name = param) then true else false
-  | Set' (VarFree(name), expr) -> if(name = param) then true else false *)
-
   | Def' (variable, value) -> has_read_occ param (Var'(variable)) || has_read_occ param value
   | If' (test, dit, dif) -> has_read_occ param test || has_read_occ param dit || has_read_occ param dif
   | Seq' expr_list -> ormap (has_read_occ param) expr_list
@@ -320,17 +318,8 @@ let rec replace_set_occ param body =
   | If' (pred, dit, dif) -> If' (replace_set_occ param pred, replace_set_occ param dit, replace_set_occ param dif)
         | Seq' lst -> Seq' (List.map (replace_set_occ param) lst)
 
-  | Def' (VarBound (par, n1, n2), e2) -> 
-  let test= replace_set_occ param (Var'(VarBound (par, n1, n2))) in
-  (match test with
-  | Var'(VarBound (e, n1, n2))-> Def' (VarBound (e, n1, n2), replace_set_occ param e2)
-  | _ -> raise X_this_should_not_happen )
-
-  | Def' (VarParam (par, n1), e2) -> 
-  let test= replace_set_occ param (Var'(VarParam (par, n1))) in
-  (match test with
-  | Var'(VarParam (e, n1))-> Def' (VarParam (e, n1), replace_set_occ param e2)
-  | _ -> raise X_this_should_not_happen )
+  | Def' (VarBound (par, n1, n2), e2) ->  Def' (VarBound (par, n1, n2), replace_set_occ param e2)
+  | Def' (VarParam (par, n1), e2) -> Def' (VarParam (par, n1), replace_set_occ param e2)
   
   | Set' ((VarBound (p, n1, n2)), expr) ->
     if (p = param)
@@ -422,13 +411,18 @@ let rec replace_get_occ param body =
     | _ -> Seq' [Set' (VarParam (param, min), Box' (VarParam (param, min))); body] ;;
 
 
-let foldfunc (param, minor) body =
-    if (need_boxing param body)
-    then (box_param param minor body)
-    else body;;
-    
+  let foldfunc (param, minor) body =
+  if (need_boxing param body)
+  then (box_param param minor body)
+  else body;;
+
+  let uniq_cons x xs = if List.mem x xs then xs else x :: xs
+
+  let remove_from_right xs = List.fold_right uniq_cons xs []
+  
 let apply_box_on_lambda params body =
   (* comine paran with it's index *)
+  let params= remove_from_right params in
   let params = List.combine params (list_all_nums_befor (List.length params)) in
   List.fold_right foldfunc params body;;
 
@@ -452,7 +446,7 @@ let rec check_for_lambdas exp =
   | ApplicTP' (op, args) -> ApplicTP' (check_for_lambdas op, List.map check_for_lambdas args)
   
   | LambdaSimple' (params, body) -> LambdaSimple' (params, check_for_lambdas (apply_box_on_lambda params body))
-  | LambdaOpt' (params, opt, body) -> LambdaOpt' (params, opt, check_for_lambdas (apply_box_on_lambda (opt::params) body))
+  | LambdaOpt' (params, opt, body) -> LambdaOpt' (params, opt, check_for_lambdas (apply_box_on_lambda (params@[opt]) body))
   |_-> exp
   ;;
     
@@ -463,4 +457,3 @@ let box_set e = check_for_lambdas e;;
     (annotate_tail_calls
     (annotate_lexical_addresses expr));;
   end;; (* struct Semantics *)
-  
