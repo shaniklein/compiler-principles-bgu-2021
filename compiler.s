@@ -138,7 +138,34 @@
 %define MAKE_CLOSURE(r, env, body) \
         MAKE_TWO_WORDS r, T_CLOSURE, env, body
 
-	
+;;==================================
+;; New
+;;----------------------------------
+;; The code below taken from RS9-10
+;;----------------------------------
+%macro MAKE_LITERAL 2
+; Make a literal of type %1; followed by the definition %2
+	db %1
+	%2
+%endmacro
+
+%define MAKE_LITERAL_FLOAT(val) \
+	MAKE_LITERAL T_FLOAT, dq val
+
+%macro MAKE_LITERAL_STRING 1
+	db T_STRING
+	dq (%%end_str- %%str)
+	%%str:
+		db %1
+	%%end_str:
+%endmacro
+
+;;----------------------------------
+;; Not from RS, I added
+% define MAKE_LITERAL_SYMBOL(val) \
+	MAKE_LITERAL T_SYMBOL, dq val
+;;==================================
+
 ;;; Macros and routines for printing Scheme OBjects to STDOUT
 %define CHAR_NUL 0
 %define CHAR_TAB 9
