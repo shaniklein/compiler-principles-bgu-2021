@@ -37,9 +37,9 @@
 	 (lambda lst
         (define make-improper
             (lambda (lst)
-                (cond [(null? lst) lst]
-                      [(null? (cdr lst)) (car lst)]
-                      [else (cons (car lst) (make-improper (cdr lst)))])))
+                (cond ((null? lst) lst)
+                      ((null? (cdr lst)) (car lst))
+                      (else (cons (car lst) (make-improper (cdr lst)))))))
         (make-improper (fold-right cons lst '() ))))
 
 
