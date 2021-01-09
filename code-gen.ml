@@ -242,15 +242,15 @@ module Code_Gen : CODE_GEN = struct
 
 let rec find_var list stop_var = 
     let hd = List.hd list in
-    if(string_eq hd stop_var) then list
+    if( hd=stop_var) then list
     else find_var ((remove_var_doubles hd list)@[hd]) stop_var;;
 
-let remove_dup_from_llist list = 
+let rec remove_dup_from_llist list = 
   match list with
   | []->[]
   | hd::tl-> find_var (remove_dup_from_llist ((remove_dup_from_llist list)@[hd])) hd
    
-  let make_fvars_tbl asts = make_index_fvar_table (remove_all_doubles (init_fvars_table @ List.flatten (List.map find_str_in_fvar asts)));;
+  let make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (List.flatten (List.map find_str_in_fvar asts)));;
 
   let generate consts fvars e = raise X_not_yet_implemented;;
   
