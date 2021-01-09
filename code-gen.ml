@@ -238,10 +238,9 @@ module Code_Gen : CODE_GEN = struct
   | head :: tail -> if(List.mem head new_l) then (remove_dup_rec  tail new_l) else (remove_dup_rec  tail (new_l @ [head]));;
   let remove_dup_from_llist l = remove_dup_rec l [];;
   
-  let  make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (List.flatten (List.map find_str_in_fvar asts)));;
+  let  make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (init_fvars_table @ List.flatten (List.map find_str_in_fvar asts)));;
   
   let generate consts fvars e = raise X_not_yet_implemented;;
-  
-
+ 
 end;;
 
