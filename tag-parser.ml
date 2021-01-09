@@ -386,7 +386,7 @@ and tag_lambda arglist body =
     let combined_pairs=List.combine vars new_vars in
     let body=      
     List.map (fun (var,exp)->Pair(Symbol("set! "), Pair(var,Pair( exp,Nil)))) combined_pairs in
-    let lmbda=Pair(Symbol("lambda"),Pair((list_to_pair new_vars),Pair((list_to_pair body),Nil))) in
+    let lmbda=Pair(Symbol("lambda"),Pair((list_to_pair new_vars),(list_to_pair body))) in
     Pair(lmbda,exprs)  
      
 
