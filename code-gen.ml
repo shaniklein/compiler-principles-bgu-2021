@@ -198,22 +198,20 @@ module Code_Gen : CODE_GEN = struct
     let tbl = populate (tbl_hdr@tbl) []  0 in
     tbl;;
 
-    (* This function recives an expr', extracting free varibale and returns it's name as a string *)
-    let rec find_str_in_fvar ex' = match ex' with
-    | Var'(VarFree str) -> [str]
-    (* | Var'(VarParam(str,_)) -> [str] *)
-    (* | Var'(VarBound(str,_,_)) -> [str] *)
-    | Applic'(expr',ls) -> (find_str_in_fvar expr') @ (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
-    | ApplicTP'(expr',ls) -> (find_str_in_fvar expr') @ (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
-    | Def'(expr'1,expr'2) -> (find_str_in_fvar (Var'(expr'1))) @ (find_str_in_fvar expr'2)
-    | Or'(ls) -> (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
-    | LambdaSimple'(param,body) -> (find_str_in_fvar body)
-    | BoxSet'(var, expr') -> (find_str_in_fvar expr')
-    | If'(test, dit, dif) -> (find_str_in_fvar test) @ (find_str_in_fvar dit) @ (find_str_in_fvar dif)
-    | Seq'(ls) -> (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
-    | Set'(expr'1,expr'2) -> (find_str_in_fvar (Var'(expr'1))) @ (find_str_in_fvar expr'2)
-    | LambdaOpt'(param,lastp,body) -> (find_str_in_fvar body) 
-    | _ -> [];;
+  (* This function recives an expr', extracting free varibale and returns it's name as a string *)
+  let rec find_str_in_fvar ex' = match ex' with
+  | Var'(VarFree(str)) -> [str]
+  | Applic'(expr',ls) -> (find_str_in_fvar expr') @ (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+  | ApplicTP'(expr',ls) -> (find_str_in_fvar expr') @ (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+  | Def'(expr'1,expr'2) -> (find_str_in_fvar (Var'(expr'1))) @ (find_str_in_fvar expr'2)
+  | Or'(ls) -> (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+  | LambdaSimple'(param,body) -> (find_str_in_fvar body)
+  | BoxSet'(var, expr') -> (find_str_in_fvar expr')
+  | If'(test, dit, dif) -> (find_str_in_fvar test) @ (find_str_in_fvar dit) @ (find_str_in_fvar dif)
+  | Seq'(ls) -> (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+  | Set'(expr'1,expr'2) -> (find_str_in_fvar (Var'(expr'1))) @ (find_str_in_fvar expr'2)
+  | LambdaOpt'(param,lastp,body) -> (find_str_in_fvar body)
+  | _ -> [];;
     
     let init_fvars_table = 
       [
@@ -233,25 +231,15 @@ module Code_Gen : CODE_GEN = struct
     
     let make_index_fvar_table l = (add_index_to_list l 0);;
   
+
+  (* There's no need of duplicates in the free variables table, the following lines deals with removing the duplicates from the table*)
+  let rec remove_dup_rec  l new_l = match l with
+  | [] -> new_l
+  | head :: tail -> if(List.mem head new_l) then (remove_dup_rec  tail new_l) else (remove_dup_rec  tail (new_l @ [head]));;
+  let remove_dup_from_llist l = remove_dup_rec l [];;
   
-  let rec remove_var_doubles var list =
-    match list with
-    |[]->[]
-    |hd::tl-> if (hd=var) then remove_var_doubles var tl
-                else hd :: (remove_var_doubles var tl);;
-
-let rec find_var list stop_var = 
-    let hd = List.hd list in
-    if( hd=stop_var) then list
-    else find_var ((remove_var_doubles hd list)@[hd]) stop_var;;
-
-let rec remove_dup_from_llist list = 
-  match list with
-  | []->[]
-  | hd::tl-> find_var (remove_dup_from_llist ((remove_dup_from_llist list)@[hd])) hd
-   
-  let make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (List.flatten (List.map find_str_in_fvar asts)));;
-
+  let  make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (List.flatten (List.map find_str_in_fvar asts)));;
+  
   let generate consts fvars e = raise X_not_yet_implemented;;
   
 
