@@ -198,9 +198,61 @@ module Code_Gen : CODE_GEN = struct
     let tbl = populate (tbl_hdr@tbl) []  0 in
     tbl;;
 
+    (* This function recives an expr', extracting free varibale and returns it's name as a string *)
+    let rec find_str_in_fvar ex' = match ex' with
+    | Var'(VarFree str) -> [str]
+    (* | Var'(VarParam(str,_)) -> [str] *)
+    (* | Var'(VarBound(str,_,_)) -> [str] *)
+    | Applic'(expr',ls) -> (find_str_in_fvar expr') @ (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+    | ApplicTP'(expr',ls) -> (find_str_in_fvar expr') @ (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+    | Def'(expr'1,expr'2) -> (find_str_in_fvar (Var'(expr'1))) @ (find_str_in_fvar expr'2)
+    | Or'(ls) -> (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+    | LambdaSimple'(param,body) -> (find_str_in_fvar body)
+    | BoxSet'(var, expr') -> (find_str_in_fvar expr')
+    | If'(test, dit, dif) -> (find_str_in_fvar test) @ (find_str_in_fvar dit) @ (find_str_in_fvar dif)
+    | Seq'(ls) -> (List.fold_left (fun a b -> a @ b) [] (List.map find_str_in_fvar ls))
+    | Set'(expr'1,expr'2) -> (find_str_in_fvar (Var'(expr'1))) @ (find_str_in_fvar expr'2)
+    | LambdaOpt'(param,lastp,body) -> (find_str_in_fvar body) 
+    | _ -> [];;
+    
+    let init_fvars_table = 
+      [
+       "null?"; "char?"; "string?";
+       "procedure?"; "symbol?"; "string-length";
+       "string-ref"; "string-set!"; "make-string";
+       "boolean?"; "float?"; "integer?"; "pair?"; "symbol->string"; 
+       "apply"; "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";
+       "char->integer"; "integer->char"; "eq?";
+       "+"; "*"; "-"; "/"; "<"; "=";   
+      ] ;;
 
-    let make_fvars_tbl asts = raise X_not_yet_implemented;;
-    let generate consts fvars e = raise X_not_yet_implemented;;
+    (*  add_index_to_list on ["a","b","c"] will return [("a",0),("b",1),("c",2)]*)
+    let rec add_index_to_list l index = match l with
+    | [] -> []
+    | head :: tl -> [(head, index)] @ (add_index_to_list tl (index+1));;
+    
+    let make_index_fvar_table l = (add_index_to_list l 0);;
+  
+  
+  let rec remove_var_doubles var list =
+    match list with
+    |[]->[]
+    |hd::tl-> if (hd=var) then remove_var_doubles var tl
+                else hd :: (remove_var_doubles var tl);;
+
+let rec find_var list stop_var = 
+    let hd = List.hd list in
+    if(string_eq hd stop_var) then list
+    else find_var ((remove_var_doubles hd list)@[hd]) stop_var;;
+
+let remove_dup_from_llist list = 
+  match list with
+  | []->[]
+  | hd::tl-> find_var (remove_dup_from_llist ((remove_dup_from_llist list)@[hd])) hd
+   
+  let make_fvars_tbl asts = make_index_fvar_table (remove_all_doubles (init_fvars_table @ List.flatten (List.map find_str_in_fvar asts)));;
+
+  let generate consts fvars e = raise X_not_yet_implemented;;
   
 
 end;;
