@@ -154,9 +154,9 @@
 
 %macro MAKE_LITERAL_STRING 1
 	db T_STRING
-	dq (%%end_str- %%str)
+	dq (%%end_str - %%str)
 %%str:
-		db %1
+	db %1
 %%end_str:
 %endmacro
 
