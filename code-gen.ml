@@ -240,6 +240,15 @@ module Code_Gen : CODE_GEN = struct
   
   let  make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (init_fvars_table @ List.flatten (List.map find_str_in_fvar asts)));;
   
+  (* Counter for unique labels *)
+  (* Code taken from https://www.cs.cornell.edu/courses/cs3110/2020fa/textbook/mut/ex_counter.html *)
+  let counter = ref 0;;
+  let next_val = 
+    fun () ->
+      counter := (!counter) + 1;
+      !counter;;
+  
+  
   let rec generate_rec consts fvars e= match e with
     | Const'(c) -> 
         let addr = get_const_address c consts in
@@ -264,6 +273,22 @@ module Code_Gen : CODE_GEN = struct
                                                                         Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
                                                                         "mov rax, SOB_VOID_ADDRESS" ;
                                                                         "; Set VarBound End\n"]  
+    (* If *)
+    | If'(tst,dit,dif) -> let lbl_num = next_val() in
+                          String.concat "\n" [(generate_rec consts fvars tst);
+                                              "cmp rax, SOB_FALSE_ADDRESS";
+                                              "je Lelse"^(string_of_int lbl_num);
+                                              (generate_rec consts fvars dit);
+                                              "jmp Lexit"^(string_of_int lbl_num);
+                                              "Lelse"^(string_of_int lbl_num)^":";
+                                              (generate_rec consts fvars dif);
+                                              "Lexit"^(string_of_int lbl_num)^":" ]
+    (* Or *)
+    | Or'(lst) -> let gen_lst = List.map (generate_rec consts fvars) lst in
+                  let lbl_num = next_val() in
+                  let asm_code = "\n"^"cmp rax, SOB_FALSE_ADDRESS"^"\n"^"jne Lexit"^(string_of_int lbl_num)^"\n" in
+                  (String.concat asm_code gen_lst)^"\n"^"Lexit"^(string_of_int lbl_num)^":"
+          
     | _ -> "";;      
 
   let generate consts fvars e = generate_rec consts fvars e;;
