@@ -64,64 +64,41 @@ module Prims : PRIMS = struct
   (* TODO:
   1. check if need to write mov rsi,PVAR(0) or just make_unary 
   2. Does the concat supposed to be like this?
-  3. Add Apply 
-  *)
+  3. Add Apply *)
+
   let procedurs =
     let procedurs_parts=[
         (*car*)
-        "push rbp
-        mov rbp, rsp
-        mov rsi, PVAR(0)
-        SKIP_TYPE_TAG rsi, rsi
+        "SKIP_TYPE_TAG rsi, rsi
         mov r10, rsi
         mov rax,r10
         leave
         ret" ,make_unary, "car";
       (*cdr*)
-        "push rbp
-        mov rbp, rsp
-        mov rsi, PVAR(0)
-        mov rsi,qword [rsi + 9]
+        "mov rsi,qword [rsi + 9]
         mov r10, rsi
         mov rax,r10
         leave
         ret",make_unary , "cdr";
       (*cons*)
-        "push rbp
-        mov rbp, rsp
-        mov rsi, PVAR(0)
-        mov rax,PVAR(1)
-        MAKE_PAIR(r10, rsi, rax)
+        "MAKE_PAIR(r10, rsi, rax)
         mov rax, r10
         leave
         ret", make_binary, "cons";
-      (*set-car*)
-      "push rbp
-      mov rbp, rsp
-      push rsi
-      push r10
-      mov rsi, PVAR(0)
-      mov r10,PVAR(1)
-      mov qword [rsi +1],r10
+      (* set-car *)
+      "mov qword [rsi +1],r10
       mov rax, SOB_VOID_ADDRESS
       pop r10
       pop rsi
       leave
       ret",make_binary, "set-car";
-    (*set-cdr*)
-    " push rbp
-      mov rbp, rsp
-      push rsi
-      push r10
-      mov rsi, PVAR(0)
-      mov r10,PVAR(1)
-      mov qword [rsi +9],r10
+    (* set-cdr *)
+    " mov qword [rsi +9],r10
       mov rax, SOB_VOID_ADDRESS
       pop r10
       pop rsi
       leave
-      ret",make_binary, "set-cdr";] in 
-      (* String.concat "\n\n" [procedurs_parts] *)
+      ret",make_binary, "set-cdr"] in 
       String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) procedurs_parts);;
       (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
      that are implemented by comparing the first byte pointed to by PVAR(0) to the relevant type tag.
@@ -375,6 +352,6 @@ module Prims : PRIMS = struct
   (* This is the interface of the module. It constructs a large x86 64-bit string using the routines
      defined above. The main compiler pipline code (in compiler.ml) calls into this module to get the
      string of primitive procedures. *)
-     let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs];;
+     let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs];; 
      end;;
      

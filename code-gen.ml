@@ -240,7 +240,29 @@ module Code_Gen : CODE_GEN = struct
   
   let  make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (init_fvars_table @ List.flatten (List.map find_str_in_fvar asts)));;
   
-  let generate consts fvars e = raise X_not_yet_implemented;;
- 
+  let rec generate_rec consts fvars e= match e with
+    | Var'(VarParam(_, minor))-> Printf.sprintf ("mov rax, qword [rbp + 8 * (4 + %d)]") minor
+    | Set'(VarParam(_, minor),exp)->  String.concat "\n" ["; Set VarParam Start" ;
+                                        (generate_rec consts fvars exp);
+                                        Printf.sprintf ("mov qword [rbp + 8 * (4 + %d)], rax") minor;
+                                        "mov rax, SOB_VOID_ADDRESS" ;
+                                        "; Set VarParam End\n"]
+    | Var'(VarBound(_, major, minor)) -> String.concat "\n" ["; VarBound Start" ;
+                                          "mov rax, qword [rbp + 8 * 2]" ;
+                                          Printf.sprintf ("mov rax, qword [rax + 8 * %d]") major ;
+                                          Printf.sprintf ("mov rax, qword [rax + 8 * %d]") minor ;
+                                          "; VarBound End\n"]
+
+                                        
+   | Set'((VarBound(_, major, minor)),exp) -> String.concat "\n" ["; Set VarBound Start";
+                                                                        (generate_rec consts fvars exp) ;
+                                                                        "mov rbx, qword [rbp + 8 * 2]" ; 
+                                                                        Printf.sprintf ("mov rbx, qword [rbx + 8 * %d]") major ;
+                                                                        Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
+                                                                        "mov rax, SOB_VOID_ADDRESS" ;
+                                                                        "; Set VarBound End\n"]  
+
+  let generate consts fvars e = generate_rec consts fvars e
+
 end;;
 
