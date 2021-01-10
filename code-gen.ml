@@ -241,6 +241,9 @@ module Code_Gen : CODE_GEN = struct
   let  make_fvars_tbl asts = make_index_fvar_table (remove_dup_from_llist (init_fvars_table @ List.flatten (List.map find_str_in_fvar asts)));;
   
   let rec generate_rec consts fvars e= match e with
+    | Const'(c) -> 
+        let addr = get_const_address c consts in
+        Printf.sprintf "mov rax, const_tbl+%d" addr
     | Var'(VarParam(_, minor))-> Printf.sprintf ("mov rax, qword [rbp + 8 * (4 + %d)]") minor
     | Set'(VarParam(_, minor),exp)->  String.concat "\n" ["; Set VarParam Start" ;
                                         (generate_rec consts fvars exp);
@@ -260,10 +263,10 @@ module Code_Gen : CODE_GEN = struct
                                                                         Printf.sprintf ("mov rbx, qword [rbx + 8 * %d]") major ;
                                                                         Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
                                                                         "mov rax, SOB_VOID_ADDRESS" ;
-                                                                        "; Set VarBound End\n"] 
-  
-  |_->""
-   let generate consts fvars e = generate_rec consts fvars e ;;
+                                                                        "; Set VarBound End\n"]  
+    | _ -> "";;      
+
+  let generate consts fvars e = generate_rec consts fvars e;;
 
 end;;
 
