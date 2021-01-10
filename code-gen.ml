@@ -260,9 +260,10 @@ module Code_Gen : CODE_GEN = struct
                                                                         Printf.sprintf ("mov rbx, qword [rbx + 8 * %d]") major ;
                                                                         Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
                                                                         "mov rax, SOB_VOID_ADDRESS" ;
-                                                                        "; Set VarBound End\n"]  
-
-  let generate consts fvars e = generate_rec consts fvars e
+                                                                        "; Set VarBound End\n"] 
+  
+  |_->""
+   let generate consts fvars e = generate_rec consts fvars e ;;
 
 end;;
 
