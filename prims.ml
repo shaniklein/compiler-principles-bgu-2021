@@ -68,23 +68,23 @@ module Prims : PRIMS = struct
 
   let procedurs =
     let procedurs_parts=[
-        (*car*)
-        "SKIP_TYPE_TAG rsi, rsi
-        mov r10, rsi
-        mov rax,r10
-        leave
-        ret" ,make_unary, "car";
+      (*car*)
+      "SKIP_TYPE_TAG rsi, rsi
+      mov r10, rsi
+      mov rax,r10
+      leave
+      ret" ,make_unary, "car";
       (*cdr*)
-        "mov rsi,qword [rsi + 9]
-        mov r10, rsi
-        mov rax,r10
-        leave
-        ret",make_unary , "cdr";
+      "mov rsi,qword [rsi + 9]
+      mov r10, rsi
+      mov rax,r10
+      leave
+      ret",make_unary , "cdr";
       (*cons*)
-        "MAKE_PAIR(r10, rsi, rax)
-        mov rax, r10
-        leave
-        ret", make_binary, "cons";
+      "MAKE_PAIR(r10, rsi, rax)
+      mov rax, r10
+      leave
+      ret", make_binary, "cons";
       (* set-car *)
       "mov qword [rsi +1],r10
       mov rax, SOB_VOID_ADDRESS
@@ -92,13 +92,34 @@ module Prims : PRIMS = struct
       pop rsi
       leave
       ret",make_binary, "setcar";
-    (* set-cdr *)
-    " mov qword [rsi +9],r10
+      (* set-cdr *)
+      " mov qword [rsi +9],r10
       mov rax, SOB_VOID_ADDRESS
       pop r10
       pop rsi
       leave
-      ret",make_binary, "setcdr"] in 
+      ret",make_binary, "setcdr";
+
+      (*apply*)
+      "mov rbx, qword[rbp + 8 * 3] 
+      dec rbx
+      lea rcx, [rbp + 8 * (rbx+3)] 
+      push SOB_NIL_ADDRESS   
+      mov rax, [rcx]  
+      mov rdx, 0   
+
+      loop:
+      cmp rax, SOB_NIL_ADDRESS  
+      je finish
+      inc rdx
+      mov rax, [rax + TYPE_SIZE+WORD_SIZE] 
+      jmp loop
+
+      finish:
+      mov rax, [rcx]  
+      mov r11, rdx",make_unary , "apply"]
+      
+      in 
       String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) procedurs_parts);;
       (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
      that are implemented by comparing the first byte pointed to by PVAR(0) to the relevant type tag.

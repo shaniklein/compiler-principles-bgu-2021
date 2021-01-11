@@ -197,7 +197,7 @@ module Code_Gen : CODE_GEN = struct
     let tbl = reduce_dups tbl [] in
     let tbl = populate (tbl_hdr@tbl) []  0 in
     tbl;;
-
+  
   (* This function recives an expr', extracting free varibale and returns it's name as a string *)
   let rec find_str_in_fvar ex' = match ex' with
   | Var'(VarFree(str)) -> [str]
@@ -279,18 +279,29 @@ module Code_Gen : CODE_GEN = struct
                                                           "mov rax, SOB_VOID_ADDRESS" ;
                                                           "; Set VarFree End\n"]
     | Seq'(seq) -> String.concat "\n" (List.map (generate_rec consts fvars) seq)
-    | BoxGet'(v) -> String.concat "\n" ["; BoxGet Start"; (generate_rec consts fvars (Var'(v)));"mov rax, qword [rax]"; "; BoxGet End\n"]
+    | BoxGet'(v) -> String.concat "\n" ["; BoxGet Start"; 
+                                        (generate_rec consts fvars (Var'(v)));
+                                        "mov rax, qword [rax]"; "; BoxGet End\n"]
+    | BoxSet'(variable, value) -> String.concat "\n" ["; BoxSet Start" ;
+                                    (generate_rec consts fvars value) ;
+                                    "push rax" ; 
+                                    (generate_rec consts fvars (Var'(variable))) ; 
+                                    "pop qword [rax]" ; 
+                                    "mov rax, SOB_VOID_ADDRESS" ;
+                                    "; BoxSet End\n" ;]
 
     (* If *)
     | If'(tst,dit,dif) -> let lbl_num = next_val() in
-                          String.concat "\n" [(generate_rec consts fvars tst);
+                          String.concat "\n" [ "; If Start";
+                                              (generate_rec consts fvars tst);
                                               "cmp rax, SOB_FALSE_ADDRESS";
                                               "je Lelse"^(string_of_int lbl_num);
                                               (generate_rec consts fvars dit);
                                               "jmp Lexit"^(string_of_int lbl_num);
                                               "Lelse"^(string_of_int lbl_num)^":";
                                               (generate_rec consts fvars dif);
-                                              "Lexit"^(string_of_int lbl_num)^":" ]
+                                              "Lexit"^(string_of_int lbl_num)^":" ;
+                                              "; If End\n"]
     (* Or *)
     | Or'(lst) -> let gen_lst = List.map (generate_rec consts fvars) lst in
                   let lbl_num = next_val() in
