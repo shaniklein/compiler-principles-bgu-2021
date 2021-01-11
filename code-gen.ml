@@ -273,6 +273,14 @@ module Code_Gen : CODE_GEN = struct
                                                                         Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
                                                                         "mov rax, SOB_VOID_ADDRESS" ;
                                                                         "; Set VarBound End\n"]  
+    | Set'(VarFree(v), exp) -> String.concat "\n" [Printf.sprintf ("; Set VarFree - %s - Start") v;                                                                
+                                                         (generate_rec consts fvars (Var'(VarFree(v)))) ;
+                                                         Printf.sprintf  ("mov qword [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable v fvars) ; 
+                                                          "mov rax, SOB_VOID_ADDRESS" ;
+                                                          "; Set VarFree End\n"]
+    | Seq'(seq) -> String.concat "\n" (List.map (generate_rec consts fvars) seq)
+    | BoxGet'(v) -> String.concat "\n" ["; BoxGet Start"; (generate_rec consts fvars (Var'(v)));"mov rax, qword [rax]"; "; BoxGet End\n"]
+
     (* If *)
     | If'(tst,dit,dif) -> let lbl_num = next_val() in
                           String.concat "\n" [(generate_rec consts fvars tst);
@@ -289,7 +297,14 @@ module Code_Gen : CODE_GEN = struct
                   let asm_code = "\n"^"cmp rax, SOB_FALSE_ADDRESS"^"\n"^"jne Lexit"^(string_of_int lbl_num)^"\n" in
                   (String.concat asm_code gen_lst)^"\n"^"Lexit"^(string_of_int lbl_num)^":"
           
-    | _ -> "";;      
+    | _ -> ""
+
+
+    and labelInFVarTable var fvars=
+      let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
+      match row with  | (_,index) -> index 
+
+
 
   let generate consts fvars e = generate_rec consts fvars e;;
 
