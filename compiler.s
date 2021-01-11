@@ -154,12 +154,11 @@
 
 %macro MAKE_LITERAL_STRING 1
 	db T_STRING
-	dq (%%end_str- %%str)
+	dq (%%end_str - %%str)
 %%str:
-		db %1
+	dq %1
 %%end_str:
 %endmacro
-
 ;;----------------------------------
 ;; Not from RS, I added
 %define MAKE_LITERAL_SYMBOL(val) \

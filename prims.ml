@@ -91,14 +91,14 @@ module Prims : PRIMS = struct
       pop r10
       pop rsi
       leave
-      ret",make_binary, "set-car";
+      ret",make_binary, "setcar";
     (* set-cdr *)
     " mov qword [rsi +9],r10
       mov rax, SOB_VOID_ADDRESS
       pop r10
       pop rsi
       leave
-      ret",make_binary, "set-cdr"] in 
+      ret",make_binary, "setcdr"] in 
       String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) procedurs_parts);;
       (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
      that are implemented by comparing the first byte pointed to by PVAR(0) to the relevant type tag.
