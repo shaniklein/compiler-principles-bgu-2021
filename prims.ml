@@ -59,7 +59,7 @@ module Prims : PRIMS = struct
 
      *** FIXME: There's a typo here: PVAR(0) should be rdi, PVAR(1) should be rsi, according to the ABI     
    *)
-  let make_unary label body = make_routine label ("mov rdi, PVAR(0)\n\t" ^ body);;
+   let make_unary label body = make_routine label ("mov rdi, PVAR(0)\n\t" ^ body);;
   let make_binary label body = make_unary label ("mov rsi, PVAR(1)\n\t" ^ body);;
   let make_tertiary label body = make_binary label ("mov rdx, PVAR(2)\n\t" ^ body);;
 
@@ -118,7 +118,7 @@ module Prims : PRIMS = struct
       
       in 
       String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) procedurs_parts);;
-  (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
+        (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
      that are implemented by comparing the first byte pointed to by PVAR(0) to the relevant type tag.
      so the only unique bits of each of these predicates are the name of the routine (i.e., the label), 
      and the type tag we expect to find.
@@ -397,6 +397,10 @@ module Prims : PRIMS = struct
          NUMERATOR rdi, rdi
          " ^ inline_gcd ^ "
 	 mov rdx, rax
+         cmp rdx, 0
+         jge .make_result
+         neg rdx
+         .make_result:
          MAKE_RATIONAL(rax, rdx, 1)", make_binary, "gcd";  
       ] in
     String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) misc_parts);;
@@ -404,5 +408,5 @@ module Prims : PRIMS = struct
   (* This is the interface of the module. It constructs a large x86 64-bit string using the routines
      defined above. The main compiler pipline code (in compiler.ml) calls into this module to get the
      string of primitive procedures. *)
-  let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs];;
-end;;
+     let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs];;
+     end;;
