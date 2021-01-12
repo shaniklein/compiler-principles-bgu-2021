@@ -10,7 +10,7 @@
    However, adding correctness-checking and error handling *as general templates* would be
    rather simple.
  *)
- module type PRIMS = sig
+module type PRIMS = sig
   val procs : string;;
 end
 
@@ -56,15 +56,12 @@ module Prims : PRIMS = struct
      The argument register assignment follows the x86 64bit Unix ABI, because there needs to be *some*
      kind of consistency, so why not just use the standard ABI.
      See page 22 in https://raw.githubusercontent.com/wiki/hjl-tools/x86-psABI/x86-64-psABI-1.0.pdf
-   *)
-   let make_unary label body = make_routine label ("mov rsi, PVAR(0)\n\t" ^ body);;
-   let make_binary label body = make_unary label ("mov rdi, PVAR(1)\n\t" ^ body);;
-   let make_tertiary label body = make_binary label ("mov rdx, PVAR(2)\n\t" ^ body);;
 
-  (* TODO:
-  1. check if need to write mov rsi,PVAR(0) or just make_unary 
-  2. Does the concat supposed to be like this?
-  3. Add Apply *)
+     *** FIXME: There's a typo here: PVAR(0) should be rdi, PVAR(1) should be rsi, according to the ABI     
+   *)
+  let make_unary label body = make_routine label ("mov rdi, PVAR(0)\n\t" ^ body);;
+  let make_binary label body = make_unary label ("mov rsi, PVAR(1)\n\t" ^ body);;
+  let make_tertiary label body = make_binary label ("mov rdx, PVAR(2)\n\t" ^ body);;
 
   let procedurs =
     let procedurs_parts=[
@@ -121,7 +118,7 @@ module Prims : PRIMS = struct
       
       in 
       String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) procedurs_parts);;
-      (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
+  (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
      that are implemented by comparing the first byte pointed to by PVAR(0) to the relevant type tag.
      so the only unique bits of each of these predicates are the name of the routine (i.e., the label), 
      and the type tag we expect to find.
@@ -143,6 +140,30 @@ module Prims : PRIMS = struct
       make_unary (name ^ "?")
         (return_boolean_eq ("mov sil, byte [rsi]\n\tcmp sil, " ^ type_tag)) in
     String.concat "\n\n" (List.map (fun (a, b) -> single_query a b) queries_to_types);;
+
+  (* The rational number artihmetic operators have to normalize the fractions they return,
+     so a GCD implementation is needed. Now there are two options: 
+     1) implement only a scheme-procedure-like GCD, and allocate rational number scheme objects for the 
+        intermediate numerator and denominator values of the fraction to be returned, call GCD, decompose
+        the returned fraction, perform the divisions, and allocate the final fraction to return
+     2) implement 2 GCDs: a low-level gcd that only implements the basic GCD loop, which is used by the rational 
+        number arithmetic operations; and a scheme-procedure-like GCD to be wrapped by the stdlib GCD implementation.
+    
+     The second option is more efficient, and doesn't cost much, in terms of executable file bloat: there are only 4
+     routines that inline the primitive gcd_loop: add, mul, div, and gcd.
+     Note that div the inline_gcd embedded in div is dead code (the instructions are never executed), so a more optimized
+     version of prims.ml could cut the duplication down to only 3 places (add, mul, gcd).
+   *)
+  let inline_gcd =
+    ".gcd_loop:
+     and rdi, rdi
+     jz .end_gcd_loop
+     cqo
+     idiv rdi
+     mov rax, rdi
+     mov rdi, rdx
+     jmp .gcd_loop	
+     .end_gcd_loop:";;
 
   (* The arithmetic operation implementation is multi-tiered:
      - The low-level implementations of all operations are binary, e.g. (+ 1 2 3) and (+ 1) are not 
@@ -188,7 +209,8 @@ module Prims : PRIMS = struct
        and not 64 bits.
      - `lt.flt` does not handle NaN, +inf and -inf correctly. This allows us to use `return_boolean jl` for both the
        floating-point and the fraction cases. For a fully correct implementation, `lt.flt` should make use of
-       the `ucomisd` opcode and `return_boolean jb` instead (see https://www.felixcloutier.com/x86/ucomisd for more information).
+       the `ucomisd` opcode and `return_boolean jb` instead (see https://www.felixcloutier.com/x86/ucomisd for
+       more information).
    *)
   let numeric_ops =
     let numeric_op name flt_body rat_body body_wrapper =      
@@ -230,6 +252,23 @@ module Prims : PRIMS = struct
 	  NUMERATOR rsi, rsi
 	  NUMERATOR rdi, rdi
           " ^ rat_op ^ "
+	  mov rax, rcx
+	  mov rdi, rsi
+          " ^ inline_gcd ^ "
+	  mov rdi, rax
+	  mov rax, rsi
+	  cqo
+	  idiv rdi
+	  mov rsi, rax
+	  mov rax, rcx
+	  cqo
+	  idiv rdi
+	  mov rcx, rax
+          cmp rcx, 0
+          jge .make_rat
+          imul rsi, -1
+          imul rcx, -1
+          .make_rat:
           MAKE_RATIONAL(rax, rsi, rcx)") in
     let comp_map = [
         (* = *)
@@ -260,8 +299,8 @@ module Prims : PRIMS = struct
 	 FLOAT_VAL rdi, rdi
 	 movq xmm1, rdi
 	 cmpltpd xmm0, xmm1
-	 movq rsi, xmm0
-	 cmp rsi, 0", "lt";
+         movq rsi, xmm0
+         cmp rsi, 0", "lt";
       ] in
     let comparator comp_wrapper name flt_body rat_body = numeric_op name flt_body rat_body comp_wrapper in
     (String.concat "\n\n" (List.map (fun (a, b, c) -> arith c b a (fun x -> x)) arith_map)) ^
@@ -273,106 +312,97 @@ module Prims : PRIMS = struct
      creating more fine-grained templates for them is beneficial. However, since they all make use of
      some of the other templates, it is beneficial to organize them in a structure that enables
      a uniform mapping operation to join them all into the final string.*)
-     let misc_ops =
-      let misc_parts = [
-          (* string ops *)
-          "STRING_LENGTH rsi, rsi
-           MAKE_RATIONAL(rax, rsi, 1)", make_unary, "string_length";
-          
-          "STRING_ELEMENTS rsi, rsi
-           NUMERATOR rdi, rdi
-           add rsi, rdi
-           mov sil, byte [rsi]
-           MAKE_CHAR(rax, sil)", make_binary, "string_ref";
-          
-          "STRING_ELEMENTS rsi, rsi
-           NUMERATOR rdi, rdi
-           add rsi, rdi
-           CHAR_VAL rax, rdx
-           mov byte [rsi], al
-           mov rax, SOB_VOID_ADDRESS", make_tertiary, "string_set";
-          
-          "NUMERATOR rsi, rsi
-           CHAR_VAL rdi, rdi
-           and rdi, 255
-           MAKE_STRING rax, rsi, dil", make_binary, "make_string";
-          
-          "SYMBOL_VAL rsi, rsi
-     STRING_LENGTH rcx, rsi
-     STRING_ELEMENTS rdi, rsi
-     push rcx
-     push rdi
-     mov dil, byte [rdi]
-     MAKE_CHAR(rax, dil)
-     push rax
-     MAKE_RATIONAL(rax, rcx, 1)
-     push rax
-     push 2
-     push SOB_NIL_ADDRESS
-     call make_string
-     add rsp, 4*8
-     STRING_ELEMENTS rsi, rax   
-     pop rdi
-     pop rcx
-     cmp rcx, 0
-     je .end
-           .loop:
-     lea r8, [rdi+rcx]
-     lea r9, [rsi+rcx]
-     mov bl, byte [r8]
-     mov byte [r9], bl
-     loop .loop
-           .end:", make_unary, "symbol_to_string";
-  
-          (* the identity predicate (i.e., address equality) *)
-          (return_boolean_eq "cmp rsi, rdi"), make_binary, "eq?";
-  
-          (* type conversions *)
-          "CHAR_VAL rsi, rsi
-     and rsi, 255
-     MAKE_RATIONAL(rax, rsi, 1)", make_unary, "char_to_integer";
-  
-          "NUMERATOR rsi, rsi
-     and rsi, 255
-     MAKE_CHAR(rax, sil)", make_unary, "integer_to_char";
-  
-          "DENOMINATOR rdi, rsi
-     NUMERATOR rsi, rsi 
-     cvtsi2sd xmm0, rsi
-     cvtsi2sd xmm1, rdi
-     divsd xmm0, xmm1
-     movq rsi, xmm0
-     MAKE_FLOAT(rax, rsi)", make_unary, "exact_to_inexact";
-  
-          "NUMERATOR rsi, rsi
-     mov rdi, 1
-     MAKE_RATIONAL(rax, rsi, rdi)", make_unary, "numerator";
-  
-          "DENOMINATOR rsi, rsi
-     mov rdi, 1
-     MAKE_RATIONAL(rax, rsi, rdi)", make_unary, "denominator";
-  
-          (* GCD *)
-          "xor rdx, rdx
-     NUMERATOR rax, rsi
-           NUMERATOR rdi, rdi
+  let misc_ops =
+    let misc_parts = [
+        (* string ops *)
+        "STRING_LENGTH rsi, rsi
+         MAKE_RATIONAL(rax, rsi, 1)", make_unary, "string_length";
+        
+        "STRING_ELEMENTS rsi, rsi
+         NUMERATOR rdi, rdi
+         add rsi, rdi
+         mov sil, byte [rsi]
+         MAKE_CHAR(rax, sil)", make_binary, "string_ref";
+        
+        "STRING_ELEMENTS rsi, rsi
+         NUMERATOR rdi, rdi
+         add rsi, rdi
+         CHAR_VAL rax, rdx
+         mov byte [rsi], al
+         mov rax, SOB_VOID_ADDRESS", make_tertiary, "string_set";
+        
+        "NUMERATOR rsi, rsi
+         CHAR_VAL rdi, rdi
+         and rdi, 255
+         MAKE_STRING rax, rsi, dil", make_binary, "make_string";
+        
+        "SYMBOL_VAL rsi, rsi
+	 STRING_LENGTH rcx, rsi
+	 STRING_ELEMENTS rdi, rsi
+	 push rcx
+	 push rdi
+	 mov dil, byte [rdi]
+	 MAKE_CHAR(rax, dil)
+	 push rax
+	 MAKE_RATIONAL(rax, rcx, 1)
+	 push rax
+	 push 2
+	 push SOB_NIL_ADDRESS
+	 call make_string
+	 add rsp, 4*8
+	 STRING_ELEMENTS rsi, rax   
+	 pop rdi
+	 pop rcx
+	 cmp rcx, 0
+	 je .end
          .loop:
-     and rdi, rdi
-     jz .end_loop
-     xor rdx, rdx 
-     div rdi
-     mov rax, rdi
-     mov rdi, rdx
-     jmp .loop	
-         .end_loop:
-     mov rdx, rax
-           MAKE_RATIONAL(rax, rdx, 1)", make_binary, "gcd";  
-        ] in
-      String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) misc_parts);;
-  
+	 lea r8, [rdi+rcx]
+	 lea r9, [rsi+rcx]
+	 mov bl, byte [r8]
+	 mov byte [r9], bl
+	 loop .loop
+         .end:", make_unary, "symbol_to_string";
+
+        (* the identity predicate (i.e., address equality) *)
+        (return_boolean_eq "cmp rsi, rdi"), make_binary, "eq?";
+
+        (* type conversions *)
+        "CHAR_VAL rsi, rsi
+	 and rsi, 255
+	 MAKE_RATIONAL(rax, rsi, 1)", make_unary, "char_to_integer";
+
+        "NUMERATOR rsi, rsi
+	 and rsi, 255
+	 MAKE_CHAR(rax, sil)", make_unary, "integer_to_char";
+
+        "DENOMINATOR rdi, rsi
+	 NUMERATOR rsi, rsi 
+	 cvtsi2sd xmm0, rsi
+	 cvtsi2sd xmm1, rdi
+	 divsd xmm0, xmm1
+	 movq rsi, xmm0
+	 MAKE_FLOAT(rax, rsi)", make_unary, "exact_to_inexact";
+
+        "NUMERATOR rsi, rsi
+	 mov rdi, 1
+	 MAKE_RATIONAL(rax, rsi, rdi)", make_unary, "numerator";
+
+        "DENOMINATOR rsi, rsi
+	 mov rdi, 1
+	 MAKE_RATIONAL(rax, rsi, rdi)", make_unary, "denominator";
+
+        (* GCD *)
+        "xor rdx, rdx
+	 NUMERATOR rax, rsi
+         NUMERATOR rdi, rdi
+         " ^ inline_gcd ^ "
+	 mov rdx, rax
+         MAKE_RATIONAL(rax, rdx, 1)", make_binary, "gcd";  
+      ] in
+    String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) misc_parts);;
+
   (* This is the interface of the module. It constructs a large x86 64-bit string using the routines
      defined above. The main compiler pipline code (in compiler.ml) calls into this module to get the
      string of primitive procedures. *)
-     let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs];; 
-     end;;
-     
+  let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs];;
+end;;
