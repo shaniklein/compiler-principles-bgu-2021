@@ -32,7 +32,7 @@ module type CODE_GEN = sig
 end;;
 
 module Code_Gen : CODE_GEN = struct
-  
+  let label_count = (ref 0);;
   (* First scan of the ast to extract all constants 2.2.1 of RS11 *)
   (* Return consant list with duplicates *)
   let rec scan_ast lst tbl = 
@@ -215,10 +215,10 @@ module Code_Gen : CODE_GEN = struct
     
     let init_fvars_table = 
       [
-       "null?"; "char?"; "string?";
-       "procedure?"; "symbol?"; "string-length";
+       "null?"; "char?"; "string?";"symbol?";"boolean?";
+       "procedure?";  "string-length";
        "string-ref"; "string-set!"; "make-string";
-       "boolean?"; "float?"; "integer?"; "pair?"; "symbol->string"; 
+        "float?"; "integer?"; "pair?"; "symbol->string"; 
        "apply"; "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";
        "char->integer"; "integer->char"; "eq?";
        "+"; "*"; "-"; "/"; "<"; "=";   
@@ -242,6 +242,12 @@ module Code_Gen : CODE_GEN = struct
   
   (* Counter for unique labels *)
   (* Code taken from https://www.cs.cornell.edu/courses/cs3110/2020fa/textbook/mut/ex_counter.html *)
+  let lambda_depth = ref 0;;
+  let next_lambd = 
+    fun () ->
+    lambda_depth := (!lambda_depth) + 1;
+      !lambda_depth;;
+  
   let counter = ref 0;;
   let next_val = 
     fun () ->
@@ -289,6 +295,33 @@ module Code_Gen : CODE_GEN = struct
                                     "pop qword [rax]" ; 
                                     "mov rax, SOB_VOID_ADDRESS" ;
                                     "; BoxSet End\n" ;]
+    | LambdaSimple'(params,body) ->  let lbl_num = next_val() in 
+                                      let lambda_num = next_lambd() in 
+                                      let lambda_label = Printf.sprintf"Lambda_%d" lbl_num in
+                                      let lambda_start_label = Printf.sprintf "Lambda_Code_%d" lbl_num in
+                                      let lambda_end_label = Printf.sprintf "End_Lambda_Code_%d" lbl_num in
+                                       String.concat "\n" ["; Lambda Start";
+                                                        (* Extend Env *)
+                                                        lambda_label^":" ;
+                                                        "mov rsi, qword [rbp+3*WORD_SIZE]";
+                                                        Printf.sprintf "EXTENV rsi, %d" (lambda_num-1);
+                                                        (* Make Closure (Alocate + Set) *)
+                                                        Printf.sprintf "MAKE_CLOSURE(rax, rbx, %s)" lambda_start_label ;
+                                                        Printf.sprintf "jmp %s" lambda_end_label ;
+                                                        (* Body *)
+                                                        lambda_start_label^":" ;
+                                                        "push rbp" ; 
+                                                        "mov rbp, rsp" ;      
+                                                        Printf.sprintf "mov rax, %d" (List.length params);                  
+                                                        "; Body Code Start" ;
+                                                        (generate_rec consts fvars body) ;
+                                                        "; Body Code End" ;
+                                                        "leave" ;
+                                                        "ret" ;
+                                                        lambda_end_label^":";
+                                                        "; Lambda End\n" ;
+                                                        ]
+
 
     (* If *)
     | If'(tst,dit,dif) -> let lbl_num = next_val() in
@@ -315,7 +348,7 @@ module Code_Gen : CODE_GEN = struct
       let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
       match row with  | (_,index) -> index 
 
-
+      
 
   let generate consts fvars e = generate_rec consts fvars e;;
 
