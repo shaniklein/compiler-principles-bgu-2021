@@ -59,8 +59,8 @@ module Prims : PRIMS = struct
 
      *** FIXME: There's a typo here: PVAR(0) should be rdi, PVAR(1) should be rsi, according to the ABI     
    *)
-   let make_unary label body = make_routine label ("mov rdi, PVAR(0)\n\t" ^ body);;
-  let make_binary label body = make_unary label ("mov rsi, PVAR(1)\n\t" ^ body);;
+   let make_unary label body = make_routine label ("mov rsi, PVAR(0)\n\t" ^ body);;
+  let make_binary label body = make_unary label ("mov rdi, PVAR(1)\n\t" ^ body);;
   let make_tertiary label body = make_binary label ("mov rdx, PVAR(2)\n\t" ^ body);;
 
   let procedurs =

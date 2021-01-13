@@ -214,12 +214,12 @@ module Code_Gen : CODE_GEN = struct
       
   let init_fvars_table = 
       [
-       "null?"; "char?"; "string?";"symbol?";"boolean?";
-       "procedure?"; "float?"; "integer?"; "pair?"; 
-       "string-ref"; "string-set!"; "make-string"; "string-length";
-       "apply"; "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";
-       "symbol->string"; "char->integer"; "integer->char"; "eq?";
-       "+"; "*"; "-"; "/"; "<"; "=";   
+        "boolean?"; "float?"; "integer?"; "pair?";"null?"; "char?"; "string?";
+        "procedure?"; "symbol?"; "string-length";
+        "string-ref"; "string-set!"; "make-string";
+        "symbol->string"; "char->integer"; "integer->char"; "eq?";
+        "+"; "*"; "-"; "/"; "<"; "="; 
+        "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" 
       ] ;;
     
     (*  add_index_to_list on ["a","b","c"] will return [("a",0),("b",1),("c",2)]*)
@@ -240,6 +240,11 @@ module Code_Gen : CODE_GEN = struct
   
   (* Counter for unique labels *)
   (* Code taken from https://www.cs.cornell.edu/courses/cs3110/2020fa/textbook/mut/ex_counter.html *)
+  let lambda_counter =ref 0 ;;
+  let next_lambd = 
+    fun() ->
+      lambda_counter:=(!lambda_counter) +1;
+      !lambda_counter;;
   let counter = ref 0;;
   let next_val = 
     fun () ->
