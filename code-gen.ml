@@ -263,24 +263,28 @@ module Code_Gen : CODE_GEN = struct
                                         "mov rax, SOB_VOID_ADDRESS" ;
                                         "; Set VarParam End\n"]
     | Var'(VarBound(_, major, minor)) -> String.concat "\n" ["; VarBound Start" ;
-                                          "mov rax, qword [rbp + 8 * 2]" ;
-                                          Printf.sprintf ("mov rax, qword [rax + 8 * %d]") major ;
-                                          Printf.sprintf ("mov rax, qword [rax + 8 * %d]") minor ;
-                                          "; VarBound End\n"]
-
-                                        
-   | Set'((VarBound(_, major, minor)),exp) -> String.concat "\n" ["; Set VarBound Start";
-                                                                        (generate_rec consts fvars exp) ;
-                                                                        "mov rbx, qword [rbp + 8 * 2]" ; 
-                                                                        Printf.sprintf ("mov rbx, qword [rbx + 8 * %d]") major ;
-                                                                        Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
-                                                                        "mov rax, SOB_VOID_ADDRESS" ;
-                                                                        "; Set VarBound End\n"]  
-    | Set'(VarFree(v), exp) -> String.concat "\n" [Printf.sprintf ("; Set VarFree - %s - Start") v;                                                                
-                                                         (generate_rec consts fvars (Var'(VarFree(v)))) ;
-                                                         Printf.sprintf  ("mov qword [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable v fvars) ; 
-                                                          "mov rax, SOB_VOID_ADDRESS" ;
-                                                          "; Set VarFree End\n"]
+                                                            "mov rax, qword [rbp + 8 * 2]" ;
+                                                              Printf.sprintf ("mov rax, qword [rax + 8 * %d]") major ;
+                                                              Printf.sprintf ("mov rax, qword [rax + 8 * %d]") minor ;
+                                                              "; VarBound End\n"]
+    | Set'(VarBound(_, major, minor), exp) -> String.concat "\n" ["; Set VarBound Start";
+                                                                          (generate_rec consts fvars exp) ;
+                                                                          "mov rbx, qword [rbp + 8 * 2]" ; 
+                                                                            Printf.sprintf ("mov rbx, qword [rbx + 8 * %d]") major ;
+                                                                            Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
+                                                                          "mov rax, SOB_VOID_ADDRESS" ;
+                                                                          "; Set VarBound End\n"]  
+    | Var'(VarFree(variable)) ->  Printf.sprintf ("mov rax, qword [fvar_tbl + WORD_SIZE * (%d)] ; VarFree") (labelInFVarTable variable fvars)  
+    | Set'(VarFree(variable), exp) -> String.concat "\n" [ Printf.sprintf "; Set VarFree - %s - Start" variable;                                                                
+                                                            (generate_rec consts fvars exp) ;
+                                                              Printf.sprintf ("mov qword [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable variable fvars) ; 
+                                                            "mov rax, SOB_VOID_ADDRESS" ;
+                                                            "; Set VarFree End\n"]
+    | Def'(VarFree(variable), exp) -> String.concat "\n" ["; Define Start" ;
+                                                                  (generate_rec consts fvars exp); 
+                                                                    Printf.sprintf ("mov [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable variable fvars);
+                                                                  "mov rax, SOB_VOID_ADDRESS" ;
+                                                                  "; Define End\n" ;]
     | Seq'(seq) -> String.concat "\n" (List.map (generate_rec consts fvars) seq)
     | BoxGet'(v) -> String.concat "\n" ["; BoxGet Start"; 
                                         (generate_rec consts fvars (Var'(v)));
@@ -292,33 +296,6 @@ module Code_Gen : CODE_GEN = struct
                                     "pop qword [rax]" ; 
                                     "mov rax, SOB_VOID_ADDRESS" ;
                                     "; BoxSet End\n" ;]
-    | LambdaSimple'(params,body) ->  let lbl_num = next_val() in 
-                                      let lambda_num = next_lambd() in 
-                                      let lambda_label = Printf.sprintf"Lambda_%d" lbl_num in
-                                      let lcode = Printf.sprintf "Lambda_Code_%d" lbl_num in
-                                      let lcont = Printf.sprintf "End_Lambda_Code_%d" lbl_num in
-                                      String.concat "\n" ["; Lambda Start";
-                                                        (* Extend Env *)
-                                                        lambda_label^":" ;
-                                                        "mov rsi, qword [rbp+3*WORD_SIZE]";
-                                                        Printf.sprintf "EXTENV rsi, %d" (lambda_num-1);
-                                                        (* Allocate closure object *)
-                                                        Printf.sprintf "MAKE_CLOSURE(rax, rbx, %s)" lcode ;
-                                                        Printf.sprintf "jmp %s" lcont ;
-                                                        (* Body *)
-                                                        lcode^":" ;
-                                                        "push rbp" ; 
-                                                        "mov rbp, rsp" ;      
-                                                        Printf.sprintf "mov rax, %d" (List.length params);                  
-                                                        "; Body Code Start" ;
-                                                        (generate_rec consts fvars body) ;
-                                                        "; Body Code End" ;
-                                                        "leave" ;
-                                                        "ret" ;
-                                                        lcont^":";
-                                                        "; Lambda End\n" ;
-                                                        ]     
-   
           
     (* If *)
     | If'(tst,dit,dif) -> let lbl_num = next_val() in
@@ -337,8 +314,8 @@ module Code_Gen : CODE_GEN = struct
                   let lbl_num = next_val() in
                   let asm_code = "\n"^"cmp rax, SOB_FALSE_ADDRESS"^"\n"^"jne Lexit"^(string_of_int lbl_num)^"\n" in
                   (String.concat asm_code gen_lst)^"\n"^"Lexit"^(string_of_int lbl_num)^":"
-
-                  (* | Applic'(proc,args)->  String.concat "\n" ["; Applic' Start";
+(* 
+                  | Applic'(proc,args)->  String.concat "\n" ["; Applic' Start";
                   "push 0xffffffffffffffff ;push magic";
                   (* push args - first reverse then push *)
                   List.fold_left (fun curr acc -> acc ^ curr) "" 
@@ -359,14 +336,13 @@ module Code_Gen : CODE_GEN = struct
                   "add rsp , rbx ; pop args";
                   "add rsp, 8 ;pop magic"]  *)
           
-    | _ -> ""
+    | _ -> "mov rax , SOB_VOID_ADDRESS\n"
 
 
     and labelInFVarTable var fvars=
       let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
       match row with  | (_,index) -> index 
 
-      
  let generate consts fvars e = generate_rec consts fvars e;;
 
 end;;
