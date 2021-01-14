@@ -317,59 +317,12 @@ module Code_Gen : CODE_GEN = struct
 
 
     | LambdaSimple'(params, body) -> let env_num = next_lambd() in
-                    String.concat "\n" [";Lambda simple start";
-                                      Printf.sprintf ("LambdaSimple%d:") env_num ;
-                                      Printf.sprintf ("ext_envLambdaSimple%d:") env_num;
-                                    (* rbd <- old_env*) 
-                                      "mov rbx, qword [rbp + 8 * 2]";
-                                      Printf.sprintf ("MALLOC rax, %d") ((env + 1) * 8);
-                                      (* initiailize loop counter with rcx *)
-                                      Printf.sprintf ("mov rcx, %d" ) (env);
-                                      "cmp rcx, 0";
-                                      Printf.sprintf ("je allocate_closerLambdaSimple%d") env_num ;
-                                      (* copy old enviroment's pointer to new one *)
-                                      Printf.sprintf ("loop_envLambdaSimple%d:") env_num ;
-                                      "dec rcx";
-                                      "mov rdx, qword[rbx + 8*rcx]";
-                                      "inc rcx";
-                                      (* old_env[i] -> new_env[i+1] *)
-                                      "mov [rax + 8 * rcx], rdx ";
-                                      Printf.sprintf ("loop loop_envLambdaSimple%d, rcx") env_num;
-                                      Printf.sprintf ("move_paramsLambdaSimple%d:") env_num  ;
-                                      "mov rcx, qword [rbp + 8 * 3]";
-                                      "cmp rcx, 0";
-                                      Printf.sprintf ("je allocate_closerLambdaSimple%d") env_num;
-                                      "inc rcx";
-                                      "mov rsi, rcx";
-                                      "shl rsi, 3";
-                                      "MALLOC rbx, rsi";
-                                      Printf.sprintf ("get_first_param_addressLambdaSimple%d:") env_num ;
-                                      "mov rdx, 32";
-                                      "add rdx, rbp";
-                                      Printf.sprintf ("loop_argsLambdaSimple%d:") env_num;
-                                      "dec rcx";
-                                      "mov rsi, [rdx + (8 * rcx)]";
-                                      "mov [rbx + 8 * rcx], rsi" ;
-                                      "inc rcx";
-                                      Printf.sprintf ("loop loop_argsLambdaSimple%d,rcx") env_num;           
-                                      "mov [rax], rbx";
-                                      Printf.sprintf ("allocate_closerLambdaSimple%d:") env_num;
-                                      (* new env adress in rbx *)
-                                      "mov rbx, rax";
-                                      "MALLOC rax, 17";
-                                      "mov rcx, 0";
-                                      "mov cl, 9";
-                                      "mov byte [rax], cl";
-                                      "mov qword [rax + 1], rbx ";
-                                      Printf.sprintf ("mov qword [rax + 9], LcodeLambdaSimple%d") env_num ;
-                                      Printf.sprintf ("jmp LcontLambdaSimple%d") env_num;
-                                      Printf.sprintf ("LcodeLambdaSimple%d:") env_num;
-                                      "push rbp\n";
-                                      "mov rbp , rsp\n";
+                    String.concat "\n" [ lambda_code env_num env "LambdaSimple";
                                       (generate_rec consts fvars (env + 1) body);
                                       "leave";
                                       "ret";
-                                      Printf.sprintf ("LcontLambdaSimple%d:") env_num
+                                      Printf.sprintf ("Lcont_LambdaSimple%d:") env_num;
+                                      ";Lambda simple end"
                                       ] 
       
 
@@ -394,13 +347,132 @@ module Code_Gen : CODE_GEN = struct
                                                   "add rsp , rbx ; pop args";
                                                   "add rsp, 8 ;pop magic"] 
 
-                                                  | _ -> "mov rax , SOB_VOID_ADDRESS\n"
+
+
+    | LambdaOpt'(params, opt, body) ->let env_num = next_lambd() in
+                                      let params_length = (List.length params) in
+                                      String.concat "\n" [
+                                       lambda_code env_num env "LambdaOpt";
+                                      "mov rcx, qword [rbp + 24]";
+                                      Printf.sprintf("mov rbx, %d")  params_length ;
+                                      "cmp rcx, rbx";
+                                      Printf.sprintf("je equal_adjast%d") env_num;
+                                      Printf.sprintf("mov rdx, %d")  params_length;
+                                      "add rdx, 4" ;
+                                      "shl rdx, 3";
+                                      "add rdx, rbp";
+                                      Printf.sprintf("sub rcx, %d") params_length ;
+                                      "mov rdi, const_tbl+1";
+                                      Printf.sprintf("move_opt_params%d:") env_num;
+                                      "dec rcx";
+                                      "mov rbx, rcx";
+                                      "shl rbx, 3";
+                                      "mov rsi, rbx";
+                                      "add rsi, rdx";
+                                      "mov rsi, qword [rsi]";
+                                      "MAKE_PAIR(rax, rsi, rdi)";
+                                      "mov rdi, rax";
+                                      "inc rcx";
+                                      Printf.sprintf("loop move_opt_params%d, rcx")  env_num;
+                                      "mov [rdx], rdi";
+                                                                                        
+                                      "mov rax, qword [rbp + 24]";
+                                      "dec rax";
+                                      "add rax, 4";
+                                      "shl rax, 3";
+                                      "add rax, rbp";
+                                      Printf.sprintf("mov rbx,%d") params_length;
+                                      "add rbx, 4";
+                                      "shl rbx, 3";
+                                      "add rbx, rbp";
+                                      Printf.sprintf("mov rcx, %d") params_length;
+                                      "add rcx, 5";
+
+                                      adjust_stack env_num params_length;
+                                      Printf.sprintf("cont_to_body%d:") env_num ;
+                                      (generate_rec consts fvars  (env + 1) body ) ;
+                                      "leave";
+                                      "ret"; 
+                                      Printf.sprintf("Lcont_LambdaOpt%d:") env_num]
+                            
+                                      
+    
+               
+ | _ -> "mov rax , SOB_VOID_ADDRESS\n"
 
 
     and labelInFVarTable var fvars=
       let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
       match row with  | (_,index) -> index 
 
+      and lambda_code env_num env label= String.concat "\n" [Printf.sprintf(";%s start") label;
+                                      Printf.sprintf ("%s%d:") label env_num ;
+                                      Printf.sprintf ("extend%s%d:") label env_num;
+                                    (* rbd <- old_env*) 
+                                      "mov rbx, qword [rbp + 8 * 2]";
+                                      Printf.sprintf ("MALLOC rax, %d") ((env + 1) * 8);
+                                      (* initiailize loop counter with rcx *)
+                                      Printf.sprintf ("mov rcx, %d" ) (env);
+                                      "cmp rcx, 0";
+                                      Printf.sprintf ("je alloc_clousre_%s%d") label env_num ;
+                                      (* copy old enviroment's pointer to new one *)
+                                      Printf.sprintf ("loop_env_%s%d:") label env_num ;
+                                      "dec rcx";
+                                      "mov rdx, qword[rbx + 8*rcx]";
+                                      "inc rcx";
+                                      (* old_env[i] -> new_env[i+1] *)
+                                      "mov [rax + 8 * rcx], rdx ";
+                                      Printf.sprintf ("loop loop_env_%s%d, rcx") label env_num;
+                                      Printf.sprintf ("move_params_%s%d:") label env_num  ;
+                                      "mov rcx, qword [rbp + 8 * 3]";
+                                      "cmp rcx, 0";
+                                      Printf.sprintf ("je alloc_clousre_%s%d") label env_num;
+                                      "inc rcx";
+                                      "mov rsi, rcx";
+                                      "shl rsi, 3";
+                                      "MALLOC rbx, rsi";
+                                      Printf.sprintf ("get_first_addr_%s%d:") label env_num ;
+                                      "mov rdx, 32";
+                                      "add rdx, rbp";
+                                      Printf.sprintf ("loop_args_%s%d:") label env_num;
+                                      "dec rcx";
+                                      "mov rsi, [rdx + (8 * rcx)]";
+                                      "mov [rbx + 8 * rcx], rsi" ;
+                                      "inc rcx";
+                                      Printf.sprintf ("loop loop_args_%s%d,rcx") label env_num;           
+                                      "mov [rax], rbx";
+                                      Printf.sprintf ("alloc_clousre_%s%d:") label env_num;
+                                      (* new env adress in rbx *)
+                                      "mov rbx, rax";
+                                      "MALLOC rax, 17";
+                                      "mov rcx, 0";
+                                      "mov cl, 9";
+                                      "mov byte [rax], cl";
+                                      "mov qword [rax + 1], rbx ";
+                                      Printf.sprintf ("mov qword [rax + 9], Lcode_%s%d") label env_num ;
+                                      Printf.sprintf ("jmp Lcont_%s%d") label env_num;
+                                      Printf.sprintf ("Lcode_%s%d:") label env_num;
+                                      "push rbp";
+                                      "mov rbp , rsp"]
+ and adjust_stack env_num params_length= String.concat "\n" [
+                                          Printf.sprintf("adjust_stack%d:") env_num;
+                                          "mov rsi, qword [rbx]";
+                                          "mov [rax], rsi";
+                                          "sub rax, 8";
+                                          "sub rbx, 8";
+                                          Printf.sprintf("loop adjust_stack%d,rcx") env_num ;
+                                          "add rax, 8";
+                                          "mov rbp, rax";
+                                          "mov rsp, rax";
+                                          Printf.sprintf("mov rbx,%d")  params_length;
+                                          "inc rbx";
+                                          "mov [rbp + 24], rbx";
+                                          Printf.sprintf("jmp cont_to_body%d") env_num ;
+                                          Printf.sprintf("equal_adjast%d:") env_num ;                             
+                                          Printf.sprintf("mov rbx,%d") params_length ;
+                                          "mov [rbp + 24], rbx";]
+
+ 
  let generate consts fvars e = generate_rec consts fvars 0 e;;
 
 end;;
