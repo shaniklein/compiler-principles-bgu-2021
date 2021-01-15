@@ -349,52 +349,54 @@ module Code_Gen : CODE_GEN = struct
 
 
 (* NOT WORKING YET *)
-| LambdaOpt'(params, opt, body) ->let global_env_counter = next_lambd() in 
-                                      String.concat "\n" [
-                                       lambda_code env_num env "LambdaOpt";
-                                      "mov rcx, qword [rbp + 3*8] ; move number of actual params to rcx";
-                                      Printf.sprintf("mov rbx, %d")  expected_params_length ;
-                                        (* check if we got the same number of arguments as we expected *)
-                                      "cmp rcx, rbx ;rbx contains expected number of param and rcx the actual number of params"; 
-                                      (* if we got same aguments as we espected jump *)
-                                      Printf.sprintf("je equal_adjast%d ;if we got same aguments as we espected jump ") env_num;
-                                      Printf.sprintf("mov rdx, %d")  expected_params_length;
-                                      "add rdx, 4 ; rdx = expected_params+4" ; 
-                                      "shl rdx, 3"; 
-                                      "add rdx, rbp";
-                                      Printf.sprintf("sub rcx, %d") expected_params_length ;
-                                      "mov rdi, const_tbl+1";
-                                      Printf.sprintf("move_opt_params%d:") env_num;
-                                      "dec rcx";
-                                      "mov rbx, rcx";
-                                      "shl rbx, 3";
-                                      "mov rsi, rbx";
-                                      "add rsi, rdx";
-                                      "mov rsi, qword [rsi]";
-                                      "MAKE_PAIR(rax, rsi, rdi)";
-                                      "mov rdi, rax";
-                                      "inc rcx";
-                                      Printf.sprintf("loop move_opt_params%d, rcx")  env_num;
-                                      "mov [rdx], rdi";
-                                                                                        
-                                      "mov rax, qword [rbp + 24]";
-                                      "dec rax";
-                                      "add rax, 4";
-                                      "shl rax, 3";
-                                      "add rax, rbp";
-                                      Printf.sprintf("mov rbx,%d") expected_params_length;
-                                      "add rbx, 4";
-                                      "shl rbx, 3";
-                                      "add rbx, rbp";
-                                      Printf.sprintf("mov rcx, %d") expected_params_length;
-                                      "add rcx, 5";
+| LambdaOpt'(params, opt, body) ->let env_num = next_lambd() in 
+                              let expected_params_length = (List.length params) in
 
-                                      adjust_stack env_num expected_params_length;
-                                      Printf.sprintf("cont_to_body%d:") env_num ;
-                                      (generate_rec consts fvars  (env + 1) body ) ;
-                                      "leave";
-                                      "ret"; 
-                                      Printf.sprintf("Lcont_LambdaOpt%d:") env_num]
+                              String.concat "\n" [
+                                lambda_code env_num env "LambdaOpt";
+                              "mov rcx, qword [rbp + 3*8] ; move number of actual params to rcx";
+                              Printf.sprintf("mov rbx, %d")  expected_params_length ;
+                                (* check if we got the same number of arguments as we expected *)
+                              "cmp rcx, rbx ;rbx contains expected number of param and rcx the actual number of params"; 
+                              (* if we got same aguments as we espected jump *)
+                              Printf.sprintf("je equal_adjast%d ;if we got same aguments as we espected jump ") env_num;
+                              Printf.sprintf("mov rdx, %d")  expected_params_length;
+                              "add rdx, 4 ; rdx = expected_params+4" ; 
+                              "shl rdx, 3";
+                              "add rdx, rbp";
+                              Printf.sprintf("sub rcx, %d") expected_params_length ;
+                              "mov rdi, const_tbl+1";
+                              Printf.sprintf("move_opt_params%d:") env_num;
+                              "dec rcx";
+                              "mov rbx, rcx";
+                              "shl rbx, 3";
+                              "mov rsi, rbx";
+                              "add rsi, rdx";
+                              "mov rsi, qword [rsi]";
+                              "MAKE_PAIR(rax, rsi, rdi)";
+                              "mov rdi, rax";
+                              "inc rcx";
+                              Printf.sprintf("loop move_opt_params%d, rcx")  env_num;
+                              "mov [rdx], rdi";
+                                                                                
+                              "mov rax, qword [rbp + 24]";
+                              "dec rax";
+                              "add rax, 4";
+                              "shl rax, 3";
+                              "add rax, rbp";
+                              Printf.sprintf("mov rbx,%d") expected_params_length;
+                              "add rbx, 4";
+                              "shl rbx, 3";
+                              "add rbx, rbp";
+                              Printf.sprintf("mov rcx, %d") expected_params_length;
+                              "add rcx, 5";
+
+                              adjust_stack env_num expected_params_length;
+                              Printf.sprintf("cont_to_body%d:") env_num ;
+                              (generate_rec consts fvars  (env + 1) body ) ;
+                              "leave";
+                              "ret"; 
+                              Printf.sprintf("Lcont_LambdaOpt%d:") env_num]
 
  | _ -> "mov rax , SOB_VOID_ADDRESS\n" 
 
@@ -469,7 +471,6 @@ module Code_Gen : CODE_GEN = struct
                                           Printf.sprintf("equal_adjast%d:") env_num ;                             
                                           Printf.sprintf("mov rbx,%d") expected_params_length ;
                                           "mov [rbp + 24], rbx";]
-
  let generate consts fvars e = generate_rec consts fvars 0 e;;
 
 end;;
