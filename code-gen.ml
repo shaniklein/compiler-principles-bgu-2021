@@ -155,7 +155,7 @@ module Code_Gen : CODE_GEN = struct
   let make_string_lit_pair a b = 
     let sa = string_of_int a in
     let sb = string_of_int b in
-    "MAKE_LITERAL_FLOAT(const_tbl+"^sa^", "^"const_tbl+"^sb^")";;
+    "MAKE_LITERAL_PAIR(const_tbl+"^sa^", "^"const_tbl+"^sb^")";;
 
   
   (* Add address and assembly string to each instance in the table *)
@@ -219,7 +219,8 @@ module Code_Gen : CODE_GEN = struct
         "string-ref"; "string-set!"; "make-string";
         "symbol->string"; "char->integer"; "integer->char"; "eq?";
         "+"; "*"; "-"; "/"; "<"; "="; 
-        "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" 
+        "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" ;
+        "numerator"
       ] ;;
     
     (*  add_index_to_list on ["a","b","c"] will return [("a",0),("b",1),("c",2)]*)
@@ -366,6 +367,7 @@ module Code_Gen : CODE_GEN = struct
                               "add rdx, rbp";
                               Printf.sprintf("sub rcx, %d") expected_params_length ;
                               "mov rdi, const_tbl+1";
+                              (* copy params *)
                               Printf.sprintf("move_opt_params%d:") env_num;
                               "dec rcx";
                               "mov rbx, rcx";
@@ -376,10 +378,11 @@ module Code_Gen : CODE_GEN = struct
                               "MAKE_PAIR(rax, rsi, rdi)";
                               "mov rdi, rax";
                               "inc rcx";
+                              (* extend the enviroment *)
                               Printf.sprintf("loop move_opt_params%d, rcx")  env_num;
                               "mov [rdx], rdi";
                                                                                 
-                              "mov rax, qword [rbp + 24]";
+                              "mov rax, qword [rbp + 3*8]";
                               "dec rax";
                               "add rax, 4";
                               "shl rax, 3";
