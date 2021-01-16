@@ -151,11 +151,11 @@
 
 %define MAKE_LITERAL_FLOAT(val) MAKE_LITERAL T_FLOAT, dq val
 
-%macro MAKE_LITERAL_STRING 1+
+%macro MAKE_LITERAL_STRING 1
 	db T_STRING
 	dq (%%end_str - %%str)
 %%str:
-	dq %1
+	db %1
 %%end_str:
 %endmacro
 

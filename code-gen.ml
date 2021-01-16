@@ -146,14 +146,18 @@ module Code_Gen : CODE_GEN = struct
     "MAKE_LITERAL_FLOAT("^sa^")";;
 
   let make_string_lit_string s = 
-    "MAKE_LITERAL_STRING("^"\""^s^"\""^")";;
+    "MAKE_LITERAL_STRING"^"\""^s^"\"";;
 
   let make_string_lit_symbol n = 
     let sn = string_of_int n in
     "MAKE_LITERAL_SYMBOL(const_tbl+"^sn^")";;
 
   let make_string_lit_char c = 
-    Printf.sprintf "MAKE_LITERAL_CHAR('%d')" (int_of_char c);;
+    let n = (int_of_char c) in
+    if (n < 32) then (* if it is a char that can't be printed, convert to ascii number*)
+    Printf.sprintf "MAKE_LITERAL_CHAR('%d')" (int_of_char c)
+    else 
+    Printf.sprintf "MAKE_LITERAL_CHAR('%c')" c;;
 
   let make_string_lit_pair a b = 
     let sa = string_of_int a in
@@ -225,7 +229,7 @@ module Code_Gen : CODE_GEN = struct
         "+"; "*"; "-"; "/"; "<"; "=";
         "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" ;
         "numerator";"denominator";"gcd";
-        "char->integer";"integer->char";"exact->inexact";
+        "char->integer";"integer->char";"exact->inexact"
       ] ;;
     
     (*  add_index_to_list on ["a","b","c"] will return [("a",0),("b",1),("c",2)]*)
