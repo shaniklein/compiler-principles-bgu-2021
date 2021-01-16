@@ -217,33 +217,16 @@ module Code_Gen : CODE_GEN = struct
   | _ -> [];;
       
   let init_fvars_table = 
-        
-        [ (* Type queries  *)
-          "boolean?";"flonum?";"rational?"; "pair?"; "null?"; "char?";"string?"; "procedure?"; "symbol?";
-        (* String procedures *)
-        "string-length"; "string-ref";"string-set!";
-        "make-string";"symbol->string";
-        (* Type conversions *)
-        "char->integer";"integer->char"; "exact->inexact";
-        (* Identity test *)
-        "eq?";
-        (* Arithmetic ops *)
-        "+"; "*"; "/"; "="; "<";
-        (* Additional rational numebr ops *)
-        "numerator"; "denominator";"gcd";
-        (* ours *)
-        "integer?"; "float?";
-        "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply"
-        ];;
-      (* [
-        "boolean?"; "float?"; "integer?"; "pair?";"null?"; "char?"; "string?";
+      [
+        "boolean?"; "flonum?";"float?";"rational?"; "pair?";"null?"; "char?"; "string?";
         "procedure?"; "symbol?"; "string-length";
         "string-ref"; "string-set!"; "make-string";
         "symbol->string"; "char->integer"; "integer->char"; "eq?";
         "+"; "*"; "-"; "/"; "<"; "="; 
         "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" ;
-        "numerator"
-      ] ;; *)
+        "numerator";"denominator";"gcd";
+        "char->integer";"integer->char";"exact->inexact";
+      ] ;;
     
     (*  add_index_to_list on ["a","b","c"] will return [("a",0),("b",1),("c",2)]*)
     let rec add_index_to_list l index = match l with
@@ -274,103 +257,97 @@ module Code_Gen : CODE_GEN = struct
       counter := (!counter) + 1;
       !counter;;
 
-
-  let rec generate_rec consts fvars env e = match e with
-    | Const'(c) -> 
-        let addr = get_const_address c consts in
-        Printf.sprintf "mov rax, const_tbl+%d" addr
-    | Var'(VarParam(_, minor))-> Printf.sprintf ("mov rax, qword [rbp + 8 * (4 + %d)]") minor
-    | Set'(VarParam(_, minor),exp)->  String.concat "\n" ["; Set VarParam Start" ;
-                                        (generate_rec consts fvars  env exp);
-                                        Printf.sprintf ("mov qword [rbp + 8 * (4 + %d)], rax") minor;
-                                        "mov rax, SOB_VOID_ADDRESS" ;
-                                        "; Set VarParam End\n"]
-    | Var'(VarBound(_, major, minor)) -> String.concat "\n" ["; VarBound Start" ;
-                                                            "mov rax, qword [rbp + 8 * 2]" ;
-                                                              Printf.sprintf ("mov rax, qword [rax + 8 * %d]") major ;
-                                                              Printf.sprintf ("mov rax, qword [rax + 8 * %d]") minor ;
-                                                              "; VarBound End\n"]
-    | Set'(VarBound(_, major, minor), exp) -> String.concat "\n" ["; Set VarBound Start";
-                                                                          (generate_rec consts fvars  env exp) ;
-                                                                          "mov rbx, qword [rbp + 8 * 2]" ; 
-                                                                            Printf.sprintf ("mov rbx, qword [rbx + 8 * %d]") major ;
-                                                                            Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
-                                                                          "mov rax, SOB_VOID_ADDRESS" ;
-                                                                          "; Set VarBound End\n"]  
-    | Var'(VarFree(variable)) ->  Printf.sprintf ("mov rax, qword [fvar_tbl + WORD_SIZE * (%d)] ; VarFree") (labelInFVarTable variable fvars)  
-    | Set'(VarFree(variable), exp) -> String.concat "\n" [ Printf.sprintf "; Set VarFree - %s - Start" variable;                                                                
-                                                            (generate_rec consts fvars  env exp) ;
-                                                              Printf.sprintf ("mov qword [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable variable fvars) ; 
-                                                            "mov rax, SOB_VOID_ADDRESS" ;
-                                                            "; Set VarFree End\n"]
-    | Def'(VarFree(variable), exp) -> String.concat "\n" ["; Define Start" ;
-                                                                  (generate_rec consts fvars  env exp); 
-                                                                    Printf.sprintf ("mov [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable variable fvars);
-                                                                  "mov rax, SOB_VOID_ADDRESS" ;
-                                                                  "; Define End\n" ;]
-    | Seq'(seq) -> String.concat "\n" (List.map (generate_rec consts fvars env) seq)
-    | BoxGet'(v) -> String.concat "\n" ["; BoxGet Start"; 
-                                        (generate_rec consts fvars env (Var'(v)) );
-                                        "mov rax, qword [rax]"; "; BoxGet End\n"]
-    | BoxSet'(variable, value) -> String.concat "\n" ["; BoxSet Start" ;
-                                    (generate_rec consts fvars env value) ;
-                                    "push rax" ; 
-                                    (generate_rec consts fvars env (Var'(variable)) ) ; 
-                                    "pop qword [rax]" ; 
+let rec generate_rec consts fvars env e = match e with
+  | Const'(c) ->
+      let addr = get_const_address c consts in
+      Printf.sprintf "mov rax, const_tbl+%d" addr
+  | Var'(VarParam(_, minor))-> Printf.sprintf ("mov rax, qword [rbp + 8 * (4 + %d)]") minor
+  | Set'(VarParam(_, minor),exp)->  String.concat "\n" ["; Set VarParam Start" ;
+                (generate_rec consts fvars  env exp);
+                Printf.sprintf ("mov qword [rbp + 8 * (4 + %d)], rax") minor;
+                "mov rax, SOB_VOID_ADDRESS" ;
+                "; Set VarParam End\n"]
+  | Var'(VarBound(_, major, minor)) -> String.concat "\n" ["; VarBound Start" ;
+                                    "mov rax, qword [rbp + 8 * 2]" ;
+                                      Printf.sprintf ("mov rax, qword [rax + 8 * %d]") major ;
+                                      Printf.sprintf ("mov rax, qword [rax + 8 * %d]") minor ;
+                                      "; VarBound End\n"]
+  | Set'(VarBound(_, major, minor), exp) -> String.concat "\n" ["; Set VarBound Start";
+                                                  (generate_rec consts fvars  env exp) ;
+                                                  "mov rbx, qword [rbp + 8 * 2]" ;
+                                                    Printf.sprintf ("mov rbx, qword [rbx + 8 * %d]") major ;
+                                                    Printf.sprintf ("mov qword [rbx + 8 * %d], rax") minor ;
+                                                  "mov rax, SOB_VOID_ADDRESS" ;
+                                                  "; Set VarBound End\n"]  
+  | Var'(VarFree(variable)) ->  Printf.sprintf ("mov rax, qword [fvar_tbl + WORD_SIZE * (%d)] ; VarFree") (labelInFVarTable variable fvars)  
+  | Set'(VarFree(variable), exp) -> String.concat "\n" [ Printf.sprintf "; Set VarFree - %s - Start" variable;                                                                
+                                    (generate_rec consts fvars  env exp) ;
+                                      Printf.sprintf ("mov qword [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable variable fvars) ; 
                                     "mov rax, SOB_VOID_ADDRESS" ;
-                                    "; BoxSet End\n" ;]
-          
-    (* If *)
-    | If'(tst,dit,dif) -> let lbl_num = next_val() in
-                          String.concat "\n" [ "; If Start";
-                                              (generate_rec consts fvars env tst );
-                                              "cmp rax, SOB_FALSE_ADDRESS";
-                                              "je Lelse"^(string_of_int lbl_num);
-                                              (generate_rec consts fvars env dit );
-                                              "jmp Lexit"^(string_of_int lbl_num);
-                                              "Lelse"^(string_of_int lbl_num)^":";
-                                              (generate_rec consts fvars  env dif );
-                                              "Lexit"^(string_of_int lbl_num)^":" ;
-                                              "; If End\n"]
-    (* Or *)
-    | Or'(lst) -> let gen_lst = List.map (generate_rec consts fvars env) lst in
-                  let lbl_num = next_val() in
-                  let asm_code = "\n"^"cmp rax, SOB_FALSE_ADDRESS"^"\n"^"jne Lexit"^(string_of_int lbl_num)^"\n" in
-                  (String.concat asm_code gen_lst)^"\n"^"Lexit"^(string_of_int lbl_num)^":"
+                                    "; Set VarFree End\n"]
+  | Def'(VarFree(variable), exp) -> String.concat "\n" ["; Define Start" ;
+                                          (generate_rec consts fvars  env exp); 
+                                            Printf.sprintf ("mov [fvar_tbl + WORD_SIZE * (%d)], rax") (labelInFVarTable variable fvars);
+                                          "mov rax, SOB_VOID_ADDRESS" ;
+                                          "; Define End\n" ;]
+  | Seq'(seq) -> String.concat "\n" (List.map (generate_rec consts fvars env) seq)
+  | BoxGet'(v) -> String.concat "\n" ["; BoxGet Start"; 
+  (generate_rec consts fvars env (Var'(v)) );
+  "mov rax, qword [rax]"; "; BoxGet End\n"]
+  | BoxSet'(variable, value) -> String.concat "\n" ["; BoxSet Start" ;
+  (generate_rec consts fvars env value) ;
+  "push rax" ; 
+  (generate_rec consts fvars env (Var'(variable)) ) ; 
+  "pop qword [rax]" ; 
+  "mov rax, SOB_VOID_ADDRESS" ;
+  "; BoxSet End\n" ;]
 
+  (* If *)
+  | If'(tst,dit,dif) -> let lbl_num = next_val() in
+  String.concat "\n" [ "; If Start";
+          (generate_rec consts fvars env tst );
+          "cmp rax, SOB_FALSE_ADDRESS";
+          "je Lelse"^(string_of_int lbl_num);
+          (generate_rec consts fvars env dit );
+          "jmp Lexit"^(string_of_int lbl_num);
+          "Lelse"^(string_of_int lbl_num)^":";
+          (generate_rec consts fvars  env dif );
+          "Lexit"^(string_of_int lbl_num)^":" ;
+          "; If End\n"]
+  (* Or *)
+  | Or'(lst) -> let gen_lst = List.map (generate_rec consts fvars env) lst in
+  let lbl_num = next_val() in
+  let asm_code = "\n"^"cmp rax, SOB_FALSE_ADDRESS"^"\n"^"jne Lexit"^(string_of_int lbl_num)^"\n" in
+  (String.concat asm_code gen_lst)^"\n"^"Lexit"^(string_of_int lbl_num)^":"
+  | LambdaSimple'(params, body) -> let env_num = next_lambd() in
+  String.concat "\n" [ lambda_code env_num env "LambdaSimple";
+                    (generate_rec consts fvars (env + 1) body);
+                    "leave";
+                    "ret";
+                    Printf.sprintf ("Lcont_LambdaSimple%d:") env_num;
+                    ";Lambda simple end"
+                    ] 
+  | Applic'(proc,args)-> String.concat "\n" ["; Applic' Start"; 
+                                                  "push SOB_NIL_ADDRESS ;push magic";
+                                                  (* push args - first reverse then push *)
+                                                  List.fold_left (fun curr acc -> acc ^ curr) "" 
+                                                  (List.map (fun arg -> (generate_rec consts fvars env arg) ^ " \n push rax \n") args);
+                                                  (* push number of arguments *)
+                                                  Printf.sprintf "push %i\n" (List.length args) ;
+                                                  generate_rec consts fvars env proc;
+                                                  "CLOSURE_ENV r8,rax" ;                                                     
+                                                  "push r8" ; (* env *)
+                                                  "CLOSURE_CODE r8, rax" ;
+                                                  "call r8" ; (* code *)
+                                                  (* this part is directly from lecture *)
+                                                  (* pop eviroment *)
+                                                  "add rsp , 8*1 ;pop env";
+                                                  "pop rbx ; pop arg count";
 
-    | LambdaSimple'(params, body) -> let env_num = next_lambd() in
-                    String.concat "\n" [ lambda_code env_num env "LambdaSimple";
-                                      (generate_rec consts fvars (env + 1) body);
-                                      "leave";
-                                      "ret";
-                                      Printf.sprintf ("Lcont_LambdaSimple%d:") env_num;
-                                      ";Lambda simple end"
-                                      ] 
-      
-
-    | Applic'(proc,args)->  String.concat "\n" ["; Applic' Start";
-                                      "push SOB_NIL_ADDRESS ;push magic";
-                                      (* push args - first reverse then push *)
-                                      List.fold_left (fun curr acc -> acc ^ curr) "" 
-                                      (List.map (fun arg -> (generate_rec consts fvars env arg) ^ " \n push rax \n") args);
-                                      (* push number of arguments *)
-                                      Printf.sprintf "push %i\n" (List.length args) ;
-                                      generate_rec consts fvars env proc;
-                                      "CLOSURE_ENV r8, rax ; r8 points to closure";
-                                      "push r8";
-                                      "CLOSURE_CODE r8, rax";
-                                      "call r8";
-                                      (* this part is directly from lecture *)
-                                      (* pop eviroment *)
-                                      "add rsp , 8*1 ;pop env";
-                                      "pop rbx ; pop arg count";
-                                      "shl rbx , 3  ; rbx=rbx*8"; 
-                                      (* pop args *)
-                                      "add rsp , rbx ; pop args";
-                                      "add rsp, 8 ;pop magic"] 
-
-
+                                                  "shl rbx , 3  ; rbx=rbx*8"; 
+                                                  (* pop args *)
+                                                  "add rsp , rbx ; pop args";
+                                                  "add rsp, 8 ;pop magic"] 
 (* NOT WORKING YET *)
 | LambdaOpt'(params, opt, body) ->let env_num = next_lambd() in 
                               let expected_params_length = (List.length params) in
@@ -422,15 +399,12 @@ module Code_Gen : CODE_GEN = struct
                               "leave";
                               "ret"; 
                               Printf.sprintf("Lcont_LambdaOpt%d:") env_num]
-
  | _ -> "mov rax , SOB_VOID_ADDRESS\n" 
+ and labelInFVarTable var fvars=
+ let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
+ match row with  | (_,index) -> index
 
-
-    and labelInFVarTable var fvars=
-      let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
-      match row with  | (_,index) -> index 
-
-      and lambda_code env_num env label= String.concat "\n" [Printf.sprintf(";%s start") label;
+ and lambda_code env_num env label= String.concat "\n" [Printf.sprintf(";%s start") label;
                                       Printf.sprintf ("%s%d:") label env_num ;
                                       Printf.sprintf ("extend%s%d:") label env_num;
                                     (* rbx <- old_env*) 
@@ -479,7 +453,7 @@ module Code_Gen : CODE_GEN = struct
                                       Printf.sprintf ("Lcode_%s%d:") label env_num;
                                       "push rbp";
                                       "mov rbp , rsp"]
- and adjust_stack env_num expected_params_length= String.concat "\n" [
+and adjust_stack env_num expected_params_length= String.concat "\n" [
                                           Printf.sprintf("adjust_stack%d:") env_num;
                                           "mov rsi, qword [rbx]";
                                           "mov [rax], rsi";
@@ -496,10 +470,19 @@ module Code_Gen : CODE_GEN = struct
                                           Printf.sprintf("equal_adjast%d:") env_num ;                             
                                           Printf.sprintf("mov rbx,%d") expected_params_length ;
                                           "mov [rbp + 24], rbx";]
+and push_applic_args consts fvars args env = 
+let n = List.length args in
+let pushed_args = List.fold_right (fun arg acc -> acc^
+                                                  "\n; Pushing Applic Arg\n"^
+                                                  (generate_rec consts fvars env arg)^
+                                                  "\npush rax\n"^
+                                                  "; End Pushing Arg\n") args "" in
+
+String.concat "\n" [pushed_args;(  Printf.sprintf "push %d ; Number of arguments Pushed" n)]
+
  let generate consts fvars e = generate_rec consts fvars 0 e;;
 
-end;;
-
+      end;;
 let test_from_read s =  List.map Semantics.run_semantics (Tag_Parser.tag_parse_expressions (Reader.read_sexprs s));;
 let test_make_consts_tbl s = (Code_Gen.make_consts_tbl (test_from_read s));;
 let test_make_fvars_tbl s = (Code_Gen.make_fvars_tbl (test_from_read s));;
