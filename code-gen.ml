@@ -305,6 +305,11 @@ let rec generate_rec consts fvars env e = match e with
   "pop qword [rax]" ; 
   "mov rax, SOB_VOID_ADDRESS" ;
   "; BoxSet End\n" ;]
+  | Box'(variable) -> String.concat "\n" ["; Box Start"; 
+  "MALLOC rbx, 8";(generate_rec consts fvars env (Var'(variable)));
+  "mov qword [rbx], rax";"
+  mov rax, rbx";
+  "; Box End\n"]
 
   (* If *)
   | If'(tst,dit,dif) -> let lbl_num = next_val() in

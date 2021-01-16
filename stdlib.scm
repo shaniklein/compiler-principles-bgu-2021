@@ -32,15 +32,13 @@
 		acc
 		(op (car lst) (fold-right op (cdr lst) acc)))))
 
-;# New
 (define cons*
-  (lambda lst
-        (define make-improper
-            (lambda (lst)
-                (cond ((null? lst) lst)
-                      ((null? (cdr lst)) (car lst))
-                      (else (cons (car lst) (make-improper (cdr lst)))))))
-        (make-improper (fold-right cons lst '() ))))
+	(lambda (a . b)
+	  (cons((null? b) a)
+		(letrec ((f (lambda (lst) 
+		          (cond ((null? lst) lst)
+		          ((null? (cdr lst)) (car lst))
+                    (cons (car lst) (f (cdr lst))))))) (cons a (f b))))))
 
 (define append
   (let ((null? null?)
