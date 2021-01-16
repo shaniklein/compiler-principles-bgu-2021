@@ -327,33 +327,21 @@ let rec generate_rec consts fvars env e = match e with
                     Printf.sprintf ("Lcont_LambdaSimple%d:") env_num;
                     ";Lambda simple end"
                     ] 
-  | Applic'(proc,args)-> String.concat "\n" ["; Applic' Start"; 
-                                                  "push SOB_NIL_ADDRESS ;push magic";
-                                                  (* push args - first reverse then push *)
-                                                  List.fold_left (fun curr acc -> acc ^ curr) "" 
-                                                  (List.map (fun arg -> (generate_rec consts fvars env arg) ^ " \n push rax \n") args);
-                                                  (* push number of arguments *)
-                                                  Printf.sprintf "push %i\n" (List.length args) ;
-                                                  generate_rec consts fvars env proc;
-                                                  "CLOSURE_ENV r8,rax" ;                                                     
-                                                  "push r8" ; (* env *)
-                                                  "CLOSURE_CODE r8, rax" ;
-                                                  "call r8" ; (* code *)
-                                                  (* this part is directly from lecture *)
-                                                  (* pop eviroment *)
-                                                  "add rsp , 8*1 ;pop env";
-                                                  "pop rbx ; pop arg count";
+  | Applic'(proc,args)-> String.concat "\n" [applic_code consts fvars env proc args "Applic'";
+                                              "CLOSURE_CODE r8, rax" ;
+                                              "call r8" ; (* code *)
+                                              (* this part is directly from lecture *)
+                                              (* pop eviroment *)
+                                              "add rsp , 8*1 ;pop env";
+                                              "pop rbx ; pop arg count";
 
-                                                  "shl rbx , 3  ; rbx=rbx*8"; 
-                                                  (* pop args *)
-                                                  "add rsp , rbx ; pop args";
-                                                  "add rsp, 8 ;pop magic"] 
-(* NOT WORKING YET *)
+                                              "shl rbx , 3  ; rbx=rbx*8"; 
+                                              (* pop args *)
+                                              "add rsp , rbx ; pop args"]
 | LambdaOpt'(params, opt, body) ->let env_num = next_lambd() in 
                               let expected_params_length = (List.length params) in
-
                               String.concat "\n" [
-                                lambda_code env_num env "LambdaOpt";
+                              lambda_code env_num env "LambdaOpt";
                               "mov rcx, qword [rbp + 3*8] ; move number of actual params to rcx";
                               Printf.sprintf("mov rbx, %d")  expected_params_length ;
                                 (* check if we got the same number of arguments as we expected *)
@@ -399,11 +387,42 @@ let rec generate_rec consts fvars env e = match e with
                               "leave";
                               "ret"; 
                               Printf.sprintf("Lcont_LambdaOpt%d:") env_num]
+| ApplicTP'(proc, args) -> let lbl_num = next_val() in
+                            String.concat "\n" ["push SOB_NIL_ADDRESS ; push  magic";
+                            applic_code consts fvars env proc args "ApplicTP'";
+                            "CLOSURE_CODE rax, rax";
+                            "push qword[rbp+8] ; old ret address";
+                            "mov rcx, qword[rsp+2*8] ; save num of ags in new frame";
+                            "add rcx, 3 ; move stack so we include,env, num of args and ret adress";
+                            "mov rdx, qword[rbp+3*8] ; store num of args of old frame";
+                            "add rdx, 4 ;  move stack so we include rbp,env, num of args and ret adress";
+                            "mov rbx, qword[rbp] ; save old rbp";
+                            (* start loop to fix stack *)
+                            Printf.sprintf ("fix_stack%d:") lbl_num;
+                            "cmp rcx, 0";
+                            Printf.sprintf ("je complete_fix_stack%d") lbl_num;
+                            "mov rdi, qword[rsp+(rcx*8)]";
+                            "mov [rbp+(rdx*8)], rdi";
+                            "dec rcx";
+                            "dec rdx";
+                            Printf.sprintf ("jmp fix_stack%d") lbl_num;
+                            Printf.sprintf("complete_fix_stack%d:") lbl_num;
+                            "mov rdi, qword[rsp+(rcx*8)]";
+                            "mov [rbp+(rdx*8)], rdi";
+                            (* code from lecture *)
+                            "mov rsp, rbp";
+                            "shl rdx, 3";
+                            (* cleaning stack- poping magis as well *)
+                            "add rsp, rdx ";
+                            "mov rbp, rbx ; restore old rbp";
+                            "jmp rax"] 
+ 
  | _ -> "mov rax , SOB_VOID_ADDRESS\n" 
  and labelInFVarTable var fvars=
  let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
  match row with  | (_,index) -> index
 
+ (* This code is mutual to Lambdasimple' and Lambdaopt' *)
  and lambda_code env_num env label= String.concat "\n" [Printf.sprintf(";%s start") label;
                                       Printf.sprintf ("%s%d:") label env_num ;
                                       Printf.sprintf ("extend%s%d:") label env_num;
@@ -465,12 +484,23 @@ and adjust_stack env_num expected_params_length= String.concat "\n" [
                                           "mov rsp, rax";
                                           Printf.sprintf("mov rbx,%d")  expected_params_length;
                                           "inc rbx";
-                                          "mov [rbp + 24], rbx";
+                                          "mov [rbp + 3*8], rbx";
                                           Printf.sprintf("jmp cont_to_body%d") env_num ;
                                           Printf.sprintf("equal_adjast%d:") env_num ;                             
                                           Printf.sprintf("mov rbx,%d") expected_params_length ;
-                                          "mov [rbp + 24], rbx";]
-
+                                          "mov [rbp + 3*8], rbx";]
+ (* This code is mutual to Applic' and ApplicTP' *)
+and applic_code consts fvars env proc args label =String.concat "\n"[
+                                                  ";"^label^" Start"; 
+                                                  (* push args - first reverse then push *)
+                                                  List.fold_left (fun curr acc -> acc ^ curr) "" 
+                                                  (List.map (fun arg -> (generate_rec consts fvars env arg) ^ " \n push rax \n") args);
+                                                  (* push number of arguments *)
+                                                  Printf.sprintf "push %i\n" (List.length args) ;
+                                                  generate_rec consts fvars env proc;
+                                                  "CLOSURE_ENV r8,rax";
+                                                  "push r8" ; (* env *)
+                                                  ]          
 
  let generate consts fvars e = generate_rec consts fvars 0 e;;
 
