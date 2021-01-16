@@ -470,15 +470,7 @@ and adjust_stack env_num expected_params_length= String.concat "\n" [
                                           Printf.sprintf("equal_adjast%d:") env_num ;                             
                                           Printf.sprintf("mov rbx,%d") expected_params_length ;
                                           "mov [rbp + 24], rbx";]
-and push_applic_args consts fvars args env = 
-let n = List.length args in
-let pushed_args = List.fold_right (fun arg acc -> acc^
-                                                  "\n; Pushing Applic Arg\n"^
-                                                  (generate_rec consts fvars env arg)^
-                                                  "\npush rax\n"^
-                                                  "; End Pushing Arg\n") args "" in
 
-String.concat "\n" [pushed_args;(  Printf.sprintf "push %d ; Number of arguments Pushed" n)]
 
  let generate consts fvars e = generate_rec consts fvars 0 e;;
 
