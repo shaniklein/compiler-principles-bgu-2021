@@ -122,7 +122,7 @@ module Code_Gen : CODE_GEN = struct
     | Sexpr(String(s)) -> 9 + (String.length s) (* String *)
     | Sexpr(Symbol(_)) -> 9 (* Symbol *)
     | Sexpr(Pair(_,_)) -> 17 (* Pair *)
-    | _ -> 0;;
+    | Sexpr(Char(_)) -> 2 (* Char *);;
 
   (* returns the offset of c from the top *)
   let rec get_const_address c tbl=
@@ -152,6 +152,9 @@ module Code_Gen : CODE_GEN = struct
     let sn = string_of_int n in
     "MAKE_LITERAL_SYMBOL(const_tbl+"^sn^")";;
 
+  let make_string_lit_char c = 
+    Printf.sprintf "MAKE_LITERAL_CHAR('%c')" c;;
+
   let make_string_lit_pair a b = 
     let sa = string_of_int a in
     let sb = string_of_int b in
@@ -171,6 +174,7 @@ module Code_Gen : CODE_GEN = struct
         | Sexpr(Bool(true)) -> "db T_BOOL, 1"
         | Sexpr(Number(Fraction(a,b))) -> make_string_lit_rat a b
         | Sexpr(Number(Float(n))) -> make_string_lit_float n
+        | Sexpr(Char(c)) -> make_string_lit_char c
         | Sexpr(String(s)) -> make_string_lit_string s
         | Sexpr(Symbol(c)) -> 
             let addr = get_const_address (Sexpr(String(c))) tbl in
@@ -179,7 +183,7 @@ module Code_Gen : CODE_GEN = struct
             let car_addr = get_const_address (Sexpr(a)) tbl in
             let cdr_addr = get_const_address (Sexpr(b)) tbl in
             make_string_lit_pair car_addr cdr_addr
-        | _ -> ""
+        (* | _ -> "" *)
       in
       let record = (car,(ptr,asm_str)) in
         populate cdr (tbl@[record]) (ptr+(calc_size car));;
@@ -213,7 +217,25 @@ module Code_Gen : CODE_GEN = struct
   | _ -> [];;
       
   let init_fvars_table = 
-      [
+        
+        [ (* Type queries  *)
+          "boolean?";"flonum?";"rational?"; "pair?"; "null?"; "char?";"string?"; "procedure?"; "symbol?";
+        (* String procedures *)
+        "string-length"; "string-ref";"string-set!";
+        "make-string";"symbol->string";
+        (* Type conversions *)
+        "char->integer";"integer->char"; "exact->inexact";
+        (* Identity test *)
+        "eq?";
+        (* Arithmetic ops *)
+        "+"; "*"; "/"; "="; "<";
+        (* Additional rational numebr ops *)
+        "numerator"; "denominator";"gcd";
+        (* ours *)
+        "integer?"; "float?";
+        "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply"
+        ];;
+      (* [
         "boolean?"; "float?"; "integer?"; "pair?";"null?"; "char?"; "string?";
         "procedure?"; "symbol?"; "string-length";
         "string-ref"; "string-set!"; "make-string";
@@ -221,7 +243,7 @@ module Code_Gen : CODE_GEN = struct
         "+"; "*"; "-"; "/"; "<"; "="; 
         "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" ;
         "numerator"
-      ] ;;
+      ] ;; *)
     
     (*  add_index_to_list on ["a","b","c"] will return [("a",0),("b",1),("c",2)]*)
     let rec add_index_to_list l index = match l with
@@ -327,26 +349,26 @@ module Code_Gen : CODE_GEN = struct
                                       ] 
       
 
-     | Applic'(proc,args)->  String.concat "\n" ["; Applic' Start";
-                                                  "push SOB_NIL_ADDRESS ;push magic";
-                                                  (* push args - first reverse then push *)
-                                                  List.fold_left (fun curr acc -> acc ^ curr) "" 
-                                                  (List.map (fun arg -> (generate_rec consts fvars env arg) ^ " \n push rax \n") args);
-                                                  (* push number of arguments *)
-                                                  Printf.sprintf "push %i\n" (List.length args) ;
-                                                  generate_rec consts fvars env proc;
-                                                  "CLOSURE_ENV r8, rax ; r8 points to closure";
-                                                  "push r8";
-                                                  "CLOSURE_CODE r8, rax";
-                                                  "call r8";
-                                                  (* this part is directly from lecture *)
-                                                  (* pop eviroment *)
-                                                  "add rsp , 8*1 ;pop env";
-                                                  "pop rbx ; pop arg count";
-                                                  "shl rbx , 3  ; rbx=rbx*8"; 
-                                                  (* pop args *)
-                                                  "add rsp , rbx ; pop args";
-                                                  "add rsp, 8 ;pop magic"] 
+    | Applic'(proc,args)->  String.concat "\n" ["; Applic' Start";
+                                      "push SOB_NIL_ADDRESS ;push magic";
+                                      (* push args - first reverse then push *)
+                                      List.fold_left (fun curr acc -> acc ^ curr) "" 
+                                      (List.map (fun arg -> (generate_rec consts fvars env arg) ^ " \n push rax \n") args);
+                                      (* push number of arguments *)
+                                      Printf.sprintf "push %i\n" (List.length args) ;
+                                      generate_rec consts fvars env proc;
+                                      "CLOSURE_ENV r8, rax ; r8 points to closure";
+                                      "push r8";
+                                      "CLOSURE_CODE r8, rax";
+                                      "call r8";
+                                      (* this part is directly from lecture *)
+                                      (* pop eviroment *)
+                                      "add rsp , 8*1 ;pop env";
+                                      "pop rbx ; pop arg count";
+                                      "shl rbx , 3  ; rbx=rbx*8"; 
+                                      (* pop args *)
+                                      "add rsp , rbx ; pop args";
+                                      "add rsp, 8 ;pop magic"] 
 
 
 (* NOT WORKING YET *)

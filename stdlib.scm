@@ -19,29 +19,28 @@
       (map-many f args)))))
 
 ;# New
-(define fold-left  
-	(lambda (op acc lst)
+(define fold-left 
+  (lambda (op acc lst)
 		(if (null? lst)
 		acc
 		(fold-left op (op acc (car lst)) (cdr lst)))))
 
 ;# New
 (define fold-right
-	 (lambda (op lst acc)
+  (lambda (op lst acc)
 		(if (null? lst)
 		acc
 		(op (car lst) (fold-right op (cdr lst) acc)))))
 
 ;# New
 (define cons*
-	 (lambda lst
+  (lambda lst
         (define make-improper
             (lambda (lst)
                 (cond ((null? lst) lst)
                       ((null? (cdr lst)) (car lst))
                       (else (cons (car lst) (make-improper (cdr lst)))))))
         (make-improper (fold-right cons lst '() ))))
-
 
 (define append
   (let ((null? null?)
@@ -91,22 +90,15 @@
 	      ((and (flonum? x) (rational? y)) (op x (exact->inexact y)))
 	      ((and (rational? x) (flonum? y)) (op (exact->inexact x) y))
 	      (else (op x y)))))))
-	(let ((normalize
-	   (lambda (x)
-	     (if (flonum? x)
-		 x
-		 (let ((n (gcd (numerator x) (denominator x))))
-		   (_/ (_/ (numerator x) n) (_/ (denominator x) n)))))))
-	(set! + (lambda x (normalize (fold-left (^numeric-op-dispatcher _+) 0 x))))
-      (set! * (lambda x (normalize (fold-left (^numeric-op-dispatcher _*) 1 x))))
+      (set! + (lambda x (fold-left (^numeric-op-dispatcher _+) 0 x)))
+      (set! * (lambda x (fold-left (^numeric-op-dispatcher _*) 1 x)))
       (set! / (let ((/ (^numeric-op-dispatcher _/)))
 		(lambda (x . y)
 		  (if (null? y)
 		      (/ 1 x)
-		      (normalize (fold-left / x y)))))))
+		      (fold-left / x y)))))
     (let ((^comparator
 	   (lambda (op)
-	   
 	     (letrec ((comparator
 		       (lambda (x ys)
 			 (or (null? ys)
@@ -116,6 +108,7 @@
 		 (comparator x y))))))
       (set! = (^comparator (^numeric-op-dispatcher _=)))
       (set! < (^comparator (^numeric-op-dispatcher _<))))))
+
 
 (define -
   (let ((apply apply)
