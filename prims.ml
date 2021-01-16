@@ -70,7 +70,7 @@ module Prims : PRIMS = struct
       (*cdr*)
       "mov rsi,qword [rsi + 9]",make_unary , "cdr";
       (*cons*)
-      "MAKE_PAIR(r10, rsi, rax)", make_binary, "cons";
+      "MAKE_PAIR (rax, rsi, rdi)", make_binary, "cons";
       (* set-car *)
       "mov qword [rsi +1],r10
       mov rax, SOB_VOID_ADDRESS

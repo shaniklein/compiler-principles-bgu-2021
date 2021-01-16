@@ -91,22 +91,15 @@
 	      ((and (flonum? x) (rational? y)) (op x (exact->inexact y)))
 	      ((and (rational? x) (flonum? y)) (op (exact->inexact x) y))
 	      (else (op x y)))))))
-	(let ((normalize
-	   (lambda (x)
-	     (if (flonum? x)
-		 x
-		 (let ((n (gcd (numerator x) (denominator x))))
-		   (_/ (_/ (numerator x) n) (_/ (denominator x) n)))))))
-	(set! + (lambda x (normalize (fold-left (^numeric-op-dispatcher _+) 0 x))))
-      (set! * (lambda x (normalize (fold-left (^numeric-op-dispatcher _*) 1 x))))
+      (set! + (lambda x (fold-left (^numeric-op-dispatcher _+) 0 x)))
+      (set! * (lambda x (fold-left (^numeric-op-dispatcher _*) 1 x)))
       (set! / (let ((/ (^numeric-op-dispatcher _/)))
 		(lambda (x . y)
 		  (if (null? y)
 		      (/ 1 x)
-		      (normalize (fold-left / x y)))))))
+		      (fold-left / x y)))))
     (let ((^comparator
 	   (lambda (op)
-	   
 	     (letrec ((comparator
 		       (lambda (x ys)
 			 (or (null? ys)
