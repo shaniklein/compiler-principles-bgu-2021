@@ -66,25 +66,19 @@ module Prims : PRIMS = struct
   let procedurs =
     let procedurs_parts=[
       (*car*)
-      "SKIP_TYPE_TAG rsi, rsi" ,make_unary, "car";
+      "mov rax, qword[rsi+TYPE_SIZE]", make_unary, "car";
       (*cdr*)
-      "mov rsi,qword [rsi + 9]",make_unary , "cdr";
+      "mov rax, qword[rsi+TYPE_SIZE+WORD_SIZE]",make_unary , "cdr";
       (*cons*)
       "MAKE_PAIR (rax, rsi, rdi)", make_binary, "cons";
       (* set-car *)
-      "mov qword [rsi +1],r10
-      mov rax, SOB_VOID_ADDRESS
-      pop r10
-      pop rsi
-      leave
-      ret",make_binary, "setcar";
+      "mov qword[rsi+TYPE_SIZE], rdi  ; change car to new value
+       mov rax, SOB_VOID_ADDRESS      ; avoid printing"
+      ,make_binary, "setcar";
       (* set-cdr *)
-      " mov qword [rsi +9],r10
-      mov rax, SOB_VOID_ADDRESS
-      pop r10
-      pop rsi
-      leave
-      ret",make_binary, "setcdr";
+      "mov qword[rsi+TYPE_SIZE+WORD_SIZE], rdi  ; change cdr to new value
+       mov rax, SOB_VOID_ADDRESS                ; avoid printing"
+      ,make_binary, "setcdr";
 
       (*apply*)
       "mov rbx, qword[rbp + 8 * 3] 
