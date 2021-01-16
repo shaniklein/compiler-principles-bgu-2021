@@ -323,7 +323,7 @@ let rec generate_rec consts fvars env e = match e with
                     Printf.sprintf ("Lcont_LambdaSimple%d:") env_num;
                     ";Lambda simple end"
                     ] 
-     | Applic'(proc,args)->  String.concat "\n" ["; Applic' Start";
+  | Applic'(proc,args)-> String.concat "\n" ["; Applic' Start"; 
                                                   "push SOB_NIL_ADDRESS ;push magic";
                                                   (* push args - first reverse then push *)
                                                   List.fold_left (fun curr acc -> acc ^ curr) "" 
@@ -333,18 +333,17 @@ let rec generate_rec consts fvars env e = match e with
                                                   generate_rec consts fvars env proc;
                                                   "CLOSURE_ENV r8,rax" ;                                                     
                                                   "push r8" ; (* env *)
-                                                  "CLOSURE_CODE rsi, rax" ;
+                                                  "CLOSURE_CODE r8, rax" ;
                                                   "call r8" ; (* code *)
                                                   (* this part is directly from lecture *)
                                                   (* pop eviroment *)
                                                   "add rsp , 8*1 ;pop env";
                                                   "pop rbx ; pop arg count";
-                                                  "inc rbx ; add the magic num as arg" ;
 
                                                   "shl rbx , 3  ; rbx=rbx*8"; 
                                                   (* pop args *)
                                                   "add rsp , rbx ; pop args";
-                                                  (* "add rsp, 8 ;pop magic"]  *)]
+                                                  "add rsp, 8 ;pop magic"] 
 
 | ApplicTP'(expression, args) -> String.concat "\n" ["; ApplicTP Start" ;
                                                     "push 7 ; magic number" ;
