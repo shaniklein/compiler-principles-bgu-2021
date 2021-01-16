@@ -19,29 +19,28 @@
       (map-many f args)))))
 
 ;# New
-(define fold-left  
-	(lambda (op acc lst)
+(define fold-left 
+  (lambda (op acc lst)
 		(if (null? lst)
 		acc
 		(fold-left op (op acc (car lst)) (cdr lst)))))
 
 ;# New
 (define fold-right
-	 (lambda (op lst acc)
+  (lambda (op lst acc)
 		(if (null? lst)
 		acc
 		(op (car lst) (fold-right op (cdr lst) acc)))))
 
 ;# New
 (define cons*
-	 (lambda lst
+  (lambda lst
         (define make-improper
             (lambda (lst)
                 (cond ((null? lst) lst)
                       ((null? (cdr lst)) (car lst))
                       (else (cons (car lst) (make-improper (cdr lst)))))))
         (make-improper (fold-right cons lst '() ))))
-
 
 (define append
   (let ((null? null?)
@@ -109,6 +108,7 @@
 		 (comparator x y))))))
       (set! = (^comparator (^numeric-op-dispatcher _=)))
       (set! < (^comparator (^numeric-op-dispatcher _<))))))
+
 
 (define -
   (let ((apply apply)

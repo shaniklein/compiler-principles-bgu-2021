@@ -122,7 +122,7 @@ module Code_Gen : CODE_GEN = struct
     | Sexpr(String(s)) -> 9 + (String.length s) (* String *)
     | Sexpr(Symbol(_)) -> 9 (* Symbol *)
     | Sexpr(Pair(_,_)) -> 17 (* Pair *)
-    | _ -> 0;;
+    | Sexpr(Char(_)) -> 2 (* Char *);;
 
   (* returns the offset of c from the top *)
   let rec get_const_address c tbl=
@@ -152,6 +152,9 @@ module Code_Gen : CODE_GEN = struct
     let sn = string_of_int n in
     "MAKE_LITERAL_SYMBOL(const_tbl+"^sn^")";;
 
+  let make_string_lit_char c = 
+    Printf.sprintf "MAKE_LITERAL_CHAR('%d')" (int_of_char c);;
+
   let make_string_lit_pair a b = 
     let sa = string_of_int a in
     let sb = string_of_int b in
@@ -171,6 +174,7 @@ module Code_Gen : CODE_GEN = struct
         | Sexpr(Bool(true)) -> "db T_BOOL, 1"
         | Sexpr(Number(Fraction(a,b))) -> make_string_lit_rat a b
         | Sexpr(Number(Float(n))) -> make_string_lit_float n
+        | Sexpr(Char(c)) -> make_string_lit_char c
         | Sexpr(String(s)) -> make_string_lit_string s
         | Sexpr(Symbol(c)) -> 
             let addr = get_const_address (Sexpr(String(c))) tbl in
@@ -179,7 +183,7 @@ module Code_Gen : CODE_GEN = struct
             let car_addr = get_const_address (Sexpr(a)) tbl in
             let cdr_addr = get_const_address (Sexpr(b)) tbl in
             make_string_lit_pair car_addr cdr_addr
-        | _ -> ""
+        (* | _ -> "" *)
       in
       let record = (car,(ptr,asm_str)) in
         populate cdr (tbl@[record]) (ptr+(calc_size car));;
@@ -218,7 +222,7 @@ module Code_Gen : CODE_GEN = struct
         "procedure?"; "symbol?"; "string-length";
         "string-ref"; "string-set!"; "make-string";
         "symbol->string"; "char->integer"; "integer->char"; "eq?";
-        "+"; "*"; "-"; "/"; "<"; "="; 
+        "+"; "*"; "-"; "/"; "<"; "=";
         "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" ;
         "numerator";"denominator";"gcd";
         "char->integer";"integer->char";"exact->inexact";

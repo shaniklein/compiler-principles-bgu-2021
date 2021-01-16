@@ -149,8 +149,7 @@
 	%2
 %endmacro
 
-%define MAKE_LITERAL_FLOAT(val) \
-	MAKE_LITERAL T_FLOAT, dq val
+%define MAKE_LITERAL_FLOAT(val) MAKE_LITERAL T_FLOAT, dq val
 
 %macro MAKE_LITERAL_STRING 1+
 	db T_STRING
@@ -159,10 +158,11 @@
 	dq %1
 %%end_str:
 %endmacro
+
+%define MAKE_LITERAL_CHAR(val) MAKE_LITERAL T_CHAR, db val
 ;;----------------------------------
 ;; Not from RS, I added
-%define MAKE_LITERAL_SYMBOL(val) \
-	MAKE_LITERAL T_SYMBOL, dq val
+%define MAKE_LITERAL_SYMBOL(val) MAKE_LITERAL T_SYMBOL, dq val
 ;;==================================
 
 ;;; Macros and routines for printing Scheme OBjects to STDOUT
