@@ -155,7 +155,7 @@
 	db T_STRING
 	dq (%%end_str - %%str)
 %%str:
-	db %1
+	dq %1
 %%end_str:
 %endmacro
 

@@ -153,7 +153,7 @@ module Code_Gen : CODE_GEN = struct
     "MAKE_LITERAL_SYMBOL(const_tbl+"^sn^")";;
 
   let make_string_lit_char c = 
-    Printf.sprintf "MAKE_LITERAL_CHAR('%c')" c;;
+    Printf.sprintf "MAKE_LITERAL_CHAR('%d')" (int_of_char c);;
 
   let make_string_lit_pair a b = 
     let sa = string_of_int a in
@@ -222,7 +222,7 @@ module Code_Gen : CODE_GEN = struct
         "procedure?"; "symbol?"; "string-length";
         "string-ref"; "string-set!"; "make-string";
         "symbol->string"; "char->integer"; "integer->char"; "eq?";
-        "+"; "*"; "-"; "/"; "<"; "="; 
+        "+"; "*"; "-"; "/"; "<"; "=";
         "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" ;
         "numerator";"denominator";"gcd";
         "char->integer";"integer->char";"exact->inexact";
