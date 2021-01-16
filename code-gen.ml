@@ -344,26 +344,6 @@ let rec generate_rec consts fvars env e = match e with
                                                   (* pop args *)
                                                   "add rsp , rbx ; pop args";
                                                   "add rsp, 8 ;pop magic"] 
-
-| ApplicTP'(expression, args) -> String.concat "\n" ["; ApplicTP Start" ;
-                                                    "push 7 ; magic number" ;
-                                                    (push_applic_args consts fvars args env);
-                                                    "; ApplicTP Code Start" ;
-                                                    (generate_rec consts fvars env expression) ;
-                                                    "; ApplicTP Code End - Continue ApplicTP" ;
-                                                    "CLOSURE_ENV rsi,rax" ;                                                     
-                                                    "push rsi" ; (* env *)
-                                                    "mov rsi,qword [rbp + 8]" ;
-                                                    "push rsi" ;
-                                                      Printf.sprintf "mov rsi, %d" (4+(List.length args)) ;
-                                                    "mov r13, qword [rbp]" ;
-                                                    "F_R_S rsi" ;
-                                                    "mov rbp, r13" ;
-                                                    "CLOSURE_CODE rsi, rax" ;
-                                                    "jmp rsi" ; (* code *)
-                                                    "; ApplicTP End\n"]
-
-
 (* NOT WORKING YET *)
 | LambdaOpt'(params, opt, body) ->let env_num = next_lambd() in 
                               let expected_params_length = (List.length params) in
