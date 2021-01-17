@@ -72,6 +72,9 @@ module Code_Gen : CODE_GEN = struct
             let op_tbl = scan_ast [op] [] in
             let vals_tbl = scan_ast vals [] in
             scan_ast cdr (tbl@op_tbl@vals_tbl)
+        | BoxSet'(_,exp) -> 
+            let e_tbl = scan_ast [exp] [] in
+            scan_ast cdr (tbl@e_tbl)
         | _-> scan_ast cdr tbl
       );;
 
@@ -152,12 +155,7 @@ module Code_Gen : CODE_GEN = struct
     let sn = string_of_int n in
     "MAKE_LITERAL_SYMBOL(const_tbl+"^sn^")";;
 
-  let make_string_lit_char c = 
-    let n = (int_of_char c) in
-    if (n < 32) then (* if it is a char that can't be printed, convert to ascii number*)
-    Printf.sprintf "MAKE_LITERAL_CHAR('%d')" (int_of_char c)
-    else 
-    Printf.sprintf "MAKE_LITERAL_CHAR('%c')" c;;
+  let make_string_lit_char c = Printf.sprintf "MAKE_LITERAL_CHAR(%s)" (string_of_int (Char.code c));;
 
   let make_string_lit_pair a b = 
     let sa = string_of_int a in
@@ -226,7 +224,7 @@ module Code_Gen : CODE_GEN = struct
         "procedure?"; "symbol?"; "string-length";
         "string-ref"; "string-set!"; "make-string";
         "symbol->string"; "char->integer"; "integer->char"; "eq?";
-        "+"; "*"; "-"; "/"; "<"; "=";
+        "+"; "*";  "/"; "<"; "=";
         "car"; "cdr"; "cons"; "set-car!"; "set-cdr!";"apply" ;
         "numerator";"denominator";"gcd";
         "char->integer";"integer->char";"exact->inexact"
@@ -497,8 +495,10 @@ and adjust_stack env_num expected_params_length= String.concat "\n" [
                                           Printf.sprintf("mov rbx,%d") expected_params_length ;
                                           "mov [rbp + 3*8], rbx";]
  (* This code is mutual to Applic' and ApplicTP' *)
-and applic_code consts fvars env proc args label =String.concat "\n"[
+and applic_code consts fvars env proc args label = let lbl_num = next_val() in
+                                                  String.concat "\n"[
                                                   ";"^label^" Start";
+                                                  Printf.sprintf("LABEL_app_%d_%d:") env lbl_num;
                                                   "push SOB_NIL_ADDRESS ;magic" ;
                                                   (* push args - first reverse then push *)
                                                   List.fold_left (fun curr acc -> acc ^ curr) "" 
