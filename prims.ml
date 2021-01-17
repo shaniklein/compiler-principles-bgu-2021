@@ -81,25 +81,66 @@ module Prims : PRIMS = struct
       ,make_binary, "setcdr";
 
       (*apply*)
-      "mov rbx, qword[rbp + 8 * 3] 
-      dec rbx
-      lea rcx, [rbp + 8 * (rbx+3)] 
-      push SOB_NIL_ADDRESS   
-      mov rax, [rcx]  
-      mov rdx, 0   
-
-      loop:
-      cmp rax, SOB_NIL_ADDRESS  
-      je finish
-      inc rdx
-      mov rax, [rax + TYPE_SIZE+WORD_SIZE] 
-      jmp loop
-
-      finish:
-      mov rax, [rcx]  
-      mov r11, rdx",make_unary , "apply"]
+      "mov rax, [rbp + 8 * 3]      ; num of args
+      dec rax
+      mov rax, qword [rbp+(4+rax)*WORD_SIZE]  ; store last arg ( the list)
+      mov rdx, 0  
       
-      in 
+      loop:
+          cmp rax, SOB_NIL_ADDRESS ;check if we got to NIL 
+          je finish ; if we do - we finish the loop
+          SKIP_TYPE_TAG rbx, rax ; still in loop - check the type 
+          push rbx
+          CDR rax, rax  
+          inc rdx
+          jmp loop
+      
+      finish:
+          mov rsi,rdx ;restote size of list
+          mov rcx, 0
+          mov rbx, rdx
+          shr rbx, 1
+          dec rdx
+      
+      
+      loop_handle_args: ;we will reverse the args order
+        cmp rcx, rbx
+        jae endloop_handle_args 
+        mov rax,[rsp+WORD_SIZE*(rdx)]; store [rsp + WORD_SIZE*(n- i -1)]
+        mov rdi,[rsp+WORD_SIZE*rcx] 
+        mov [rsp+WORD_SIZE * rdx],rdi
+        mov [rsp+WORD_SIZE*rcx],rax
+        dec rdx
+        inc rcx
+        jmp loop_handle_args 
+      
+      
+      endloop_handle_args: 
+        mov rax, [rbp + WORD_SIZE * 3];num of args
+        mov rdi, rax 
+        add rdi,2
+      
+      
+      loop_push_arg:
+          cmp rdi, 4
+          jbe end_loop_push_arg
+          push qword [rbp+WORD_SIZE*rdi]
+          inc rsi
+          dec rdi
+          jmp loop_push_arg
+    
+          
+      end_loop_push_arg:
+        push rsi ;push number of args
+        mov rax, qword [rbp+4*WORD_SIZE]; take pvar(0) whis is the closure.
+        CLOSURE_ENV rbx, rax
+        push rbx
+        CLOSURE_CODE rbx, rax
+        call rbx
+        add rsp,WORD_SIZE
+        pop rbx
+        shl rbx, 3
+        add rsp, rbx ",make_routine , "apply"] in 
       String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) procedurs_parts);;
         (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
      that are implemented by comparing the first byte pointed to by PVAR(0) to the relevant type tag.

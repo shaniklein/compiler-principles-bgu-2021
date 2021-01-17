@@ -34,11 +34,10 @@
 
 (define cons*
 	(lambda (a . b)
-	  (cons((null? b) a)
+	(if (null? b) a
 		(letrec ((f (lambda (lst) 
-		          (cond ((null? lst) lst)
-		          ((null? (cdr lst)) (car lst))
-                    (cons (car lst) (f (cdr lst))))))) (cons a (f b))))))
+		(if (null? (cdr lst)) (car lst)
+         (cons (car lst) (f (cdr x))))))) (cons a (f b))))))
 
 (define append
   (let ((null? null?)
