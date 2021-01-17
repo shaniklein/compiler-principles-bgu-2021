@@ -37,7 +37,7 @@
 	(if (null? b) a
 		(letrec ((f (lambda (lst) 
 		(if (null? (cdr lst)) (car lst)
-         (cons (car lst) (f (cdr x))))))) (cons a (f b))))))
+         (cons (car lst) (f (cdr lst))))))) (cons a (f b))))))
 
 (define append
   (let ((null? null?)
