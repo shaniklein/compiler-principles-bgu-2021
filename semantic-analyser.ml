@@ -155,7 +155,7 @@ let check_f_before_g seq param f g=
 (* ---------------------- *)
 (* return true if we need to do boxing to parameter "param"*)
 let  rec need_boxing param body =
-  if(check_specials param body ) then false else  
+  (* if(check_specials param body ) then false else   *)
   let reading_occurences = count_param_reading_occurrences param body 0 in
   let writing_occurences = count_param_writing_occurrences param body 0 in
   let matched=different_ribs reading_occurences writing_occurences in 
