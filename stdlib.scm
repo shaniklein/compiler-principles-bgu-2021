@@ -18,7 +18,8 @@
     (lambda (f . args)
       (map-many f args)))))
 
-(define fold-left 
+;# New
+  (define fold-left 
   (let ((null? null?) (apply apply)
         (cons cons) (map map)
         (car car) (cdr cdr))
@@ -28,8 +29,9 @@
           (if (null? (car lst))
             acc
             (fold (apply op (cons acc (map car lst))) (map cdr lst))))))
-        (fold acc lists)))))
+        (fold acc lst)))))
 
+;# New
 (define fold-right
   (let ((null? null?) (cons cons) (car car) (cdr cdr) (apply apply) (map map))
 	  (letrec ((append
@@ -46,6 +48,7 @@
                 (res (fold f obj (map cdr lists))))
               (apply f (append car-lists (cons res '()))))))))
 				  (fold f obj lists))))))
+
 (define cons*
 	(lambda (a . b)
 	(if (null? b) a
