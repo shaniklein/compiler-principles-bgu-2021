@@ -343,7 +343,7 @@ let rec generate_rec consts fvars env e = match e with
                                               (* pop eviroment *)
                                               "add rsp , 8*1 ;pop env";
                                               "pop rbx ; pop arg count";
-
+                                              "inc rbx ; add the magic num as arg" ;
                                               "shl rbx , 3  ; rbx=rbx*8"; 
                                               (* pop args *)
                                               "add rsp , rbx ; pop args"]
@@ -397,8 +397,7 @@ let rec generate_rec consts fvars env e = match e with
                               "ret"; 
                               Printf.sprintf("Lcont_LambdaOpt%d:") env_num]
 | ApplicTP'(proc, args) -> let lbl_num = next_val() in
-                            String.concat "\n" ["push SOB_NIL_ADDRESS ; push  magic";
-                            applic_code consts fvars env proc args "ApplicTP'";
+                            String.concat "\n" [applic_code consts fvars env proc args "ApplicTP'";
                             "CLOSURE_CODE rax, rax";
                             "push qword[rbp+8] ; old ret address";
                             "mov rcx, qword[rsp+2*8] ; save num of ags in new frame";
@@ -425,7 +424,6 @@ let rec generate_rec consts fvars env e = match e with
                             "add rsp, rdx ";
                             "mov rbp, rbx ; restore old rbp";
                             "jmp rax"] 
- 
  | _ -> "mov rax , SOB_VOID_ADDRESS\n" 
  and labelInFVarTable var fvars=
  let row = List.find (fun (name, _) -> (compare var name == 0)) fvars in
@@ -500,7 +498,8 @@ and adjust_stack env_num expected_params_length= String.concat "\n" [
                                           "mov [rbp + 3*8], rbx";]
  (* This code is mutual to Applic' and ApplicTP' *)
 and applic_code consts fvars env proc args label =String.concat "\n"[
-                                                  ";"^label^" Start"; 
+                                                  ";"^label^" Start";
+                                                  "push SOB_NIL_ADDRESS ;magic" ;
                                                   (* push args - first reverse then push *)
                                                   List.fold_left (fun curr acc -> acc ^ curr) "" 
                                                   (List.map (fun arg -> (generate_rec consts fvars env arg) ^ " \n push rax \n") args);

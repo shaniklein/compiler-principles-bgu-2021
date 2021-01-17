@@ -6,3 +6,4 @@ folder/foo.s
 foo.s
 foo.scm
 foo.o
+test.scm
