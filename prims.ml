@@ -78,69 +78,83 @@ module Prims : PRIMS = struct
       (* set-cdr *)
       "mov qword[rsi+TYPE_SIZE+WORD_SIZE], rdi  ; change cdr to new value
        mov rax, SOB_VOID_ADDRESS                ; avoid printing"
-      ,make_binary, "setcdr"] in
+      ,make_binary, "setcdr";
 
       (*apply*)
-      (* "mov rax, [rbp + 8 * 3]      ; num of args
-      dec rax
-      mov rax, qword [rbp+(4+rax)*WORD_SIZE]  ; store last arg ( the list)
-      mov rdx, 0  
-      
-      loop:
-          cmp rax, SOB_NIL_ADDRESS ;check if we got to NIL 
-          je finish ; if we do - we finish the loop
-          SKIP_TYPE_TAG rbx, rax ; still in loop - check the type 
+      "mov rax, qword [rbp+3*8]
+      mov rax,  qword [rbp+(4+(rax-1))*WORD_SIZE] ; var at rax-1
+      mov rsi, rsp
+      mov rcx, 0
+      .loop:
+          cmp rax, SOB_NIL_ADDRESS
+          je .loop_end
+          SKIP_TYPE_TAG rbx, rax
           push rbx
-          CDR rax, rax  
-          inc rdx
-          jmp loop
+          mov rax, qword [rax+TYPE_SIZE+WORD_SIZE]
+          inc rcx
+          jmp .loop
+      .loop_end:
+          mov rdi, rsp
       
-      finish:
-          mov rsi,rdx ;restote size of list
-          mov rcx, 0
-          mov rbx, rdx
-          shr rbx, 1
-          dec rdx
-      
-      
-      loop_handle_args: ;we will reverse the args order
-        cmp rcx, rbx
-        jae endloop_handle_args 
-        mov rax,[rsp+WORD_SIZE*(rdx)]; store [rsp + WORD_SIZE*(n- i -1)]
-        mov rdi,[rsp+WORD_SIZE*rcx] 
-        mov [rsp+WORD_SIZE * rdx],rdi
-        mov [rsp+WORD_SIZE*rcx],rax
-        dec rdx
-        inc rcx
-        jmp loop_handle_args 
-      
-      
-      endloop_handle_args: 
-        mov rax, [rbp + WORD_SIZE * 3];num of args
-        mov rdi, rax 
-        add rdi,2
-      
-      
-      loop_push_arg:
-          cmp rdi, 4
-          jbe end_loop_push_arg
-          push qword [rbp+WORD_SIZE*rdi]
-          inc rsi
-          dec rdi
-          jmp loop_push_arg
+    .rev_loop:
+        cmp rsi, rdi
+        jbe .rev_loop_end ; we will reverse only if rdi>=sdi
+        sub rsi, 8
+        mov rax, qword [rsi]
+        mov rbx, qword [rdi]
+        mov qword [rdi], rax
+        mov qword [rsi], rbx
+        add rdi, 8
+        jmp .rev_loop
     
-          
-      end_loop_push_arg:
-        push rsi ;push number of args
-        mov rax, qword [rbp+4*WORD_SIZE]; take pvar(0) whis is the closure.
-        CLOSURE_ENV rbx, rax
-        push rbx
-        CLOSURE_CODE rbx, rax
-        call rbx
-        add rsp,WORD_SIZE
-        pop rbx
-        shl rbx, 3
-        add rsp, rbx ",make_routine , "apply"] in  *)
+    .rev_loop_end:
+        mov rax, qword [rbp+3*8]
+        lea rsi, [rbp+(2+rax)*WORD_SIZE]
+        lea rdi, [rbp+3*8+WORD_SIZE]
+     
+    .copy_stack:
+        cmp rsi, rdi
+        je .copy_stack_end
+        push qword [rsi]
+        sub rsi, WORD_SIZE
+        jmp .copy_stack
+    
+    .copy_stack_end:
+      add rcx, rax
+      sub rcx, 2
+      push rcx
+      mov rax, PVAR(0)
+  
+      push qword [rax + TYPE_SIZE] ; closure
+      push qword [rbp + 8] ;old ret addr
+      mov rdi, rbp 
+      mov rsi, rsp 
+      mov rbp, qword [rbp]
+      
+      mov rcx, rdi
+      sub rcx, rsi
+      mov rsi, rdi
+      add rdi, WORD_SIZE*3 ;old rbp, ret addr, env
+      mov r8, qword[rdi] ; num of args
+      shl r8, 3
+      add rdi, 8 
+      add rdi, r8 ;
+      
+      
+      .copy_loop:
+          cmp rcx, 0
+          je .copy_loopEnd
+          sub rdi, 8
+          sub rsi, 8
+          mov r8, qword[rsi]
+          mov qword[rdi], r8
+          sub rcx, 8
+          jmp .copy_loop
+      
+     .copy_loopEnd:
+          mov rsp, rdi
+          CLOSURE_CODE rax, rax ; Move closure code to rax
+          jmp rax", make_routine, "apply"] in
       String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) procedurs_parts);;
         (* All of the type queries in scheme (e.g., null?, pair?, char?, etc.) are equality predicates
      that are implemented by comparing the first byte pointed to by PVAR(0) to the relevant type tag.
@@ -428,155 +442,8 @@ module Prims : PRIMS = struct
          MAKE_RATIONAL(rax, rdx, 1)", make_binary, "gcd";  
       ] in
     String.concat "\n\n" (List.map (fun (a, b, c) -> (b c a)) misc_parts);;
- (* apply (variadic) *)
- let apply_variadic = 
-  let begin_apply = 
-    "apply:\npush rbp\nmov rbp, rsp\n"
-  in
-  let get_last_arg_to_rax = 
-    "; Getting the last arg (n-1) to rax\n"
-  ^ "mov rax, qword [rbp+3*8]\n" 
-  ^ "mov rax, PVAR(rax-1)"
-  in 
-  let push_all_members_of_list_to_stack = 
-    "; We need to prepare a fake frame of the procedure in arg0 before applying the logic\n"
-    ^ "; of ApplicTP' frame copy. first, copy all the args in the reverse order\n"
-    ^ ";"
-    ^ "; assuming the last arg (which is a list) is in RAX, travel the list and push the consts to the stack\n"
-    ^ "; This will create an array of constants on the stack, NOT in the correct order\n"
-    ^ "; after this, we should reverse this array (before applying the ApplicTP' logic)\n"
-    ^ ";"
-    ^ "; rsi will store the location of the current rsp (for the future reverse)\n"
-    ^ "mov rsi, rsp\n"
-    ^ "; rcx will be the counter of the length of the list\n"
-    ^ "; at the end, we will add this number to the current args count (minus 1) to get the actual number of args\n"
-    ^ "mov rcx, 0\n"
-    ^ ".apply_variadic_push_last_list_to_stack_loop:\n"
-    ^ "; compare current list to NIL\n" 
-    ^ "cmp rax, SOB_NIL_ADDRESS\n"
-    ^ "; if equal, we are done\n"
-    ^ "je .apply_variadic_push_last_list_to_stack_loop_end\n"
-    ^ "; not NIL, push car to stack\n"
-    ^ "CAR rbx, rax\n"
-    ^ "push rbx\n"
-    ^ "CDR rax, rax\n"
-    ^ "inc rcx\n"
-    ^ "jmp .apply_variadic_push_last_list_to_stack_loop\n"
-    ^ ".apply_variadic_push_last_list_to_stack_loop_end:\n"
-    ^ "; rdi will save the current location of rsp for the copy\n"
-    ^ "mov rdi, rsp\n"
-  in
-  let reverse_array_between_rsi_and_rdi =
-    ".apply_variadic_reverse_loop:\n"
-    ^ "; first check if rsi <= rdi, if so - there is nothing to reverse\n"
-    ^ "cmp rsi, rdi\n"
-    ^ "jbe .apply_variadic_reverse_loop_end\n"
-    ^ "; move rsi one qword below\n"
-    ^ "sub rsi, 8\n"
-    ^ "; replace rsi and rdi values\n"
-    ^ "mov rax, qword [rsi]\n"
-    ^ "mov rbx, qword [rdi]\n"
-    ^ "mov qword [rdi], rax\n"
-    ^ "mov qword [rsi], rbx\n"
-    ^ "; advance rdi one qword above\n"
-    ^ "add rdi, 8\n"
-    ^ "jmp .apply_variadic_reverse_loop\n"
-    ^ ".apply_variadic_reverse_loop_end:\n"
-  in
-  let copy_rest_of_args_to_the_stack = 
-    "; Now, below the last rbp on the stack, the last arguments are located in the correct reversed order\n"
-    ^ "; before applying the ApplicTP' frame copy logic, we need to copy the rest of the arguemnts for the proc\n"
-    ^ "; copy n-2 arguments and push them to stack (n-2),(n-3)...,1\n"
-    
-    ^ "; Getting the (n-2) arg address to rsi\n"
-    ^ "mov rax, qword [rbp+3*8]\n"
-    ^ "lea rsi, [rbp+(2+rax)*WORD_SIZE] ; Get the pointer on stack to PVAR(rax-2)\n"
-
-    ^ "; Push the rest of the args\n"
-    ^ "lea rdi, [rbp+3*8+WORD_SIZE] ; We'll use this value to stop the loop. We want to stop BEFORE the first arg - this is the func to apply\n"
-    ^ ".apply_variadic_copy_rest_of_stack_loop:\n"
-    ^ "cmp rsi, rdi ; We want to stop BEFORE the first arg - this is the func to apply\n"
-    ^ "je .apply_variadic_copy_rest_of_stack_end\n"
-
-    ^ "push qword [rsi]\n"
-    ^ "sub rsi, WORD_SIZE\n"
-    ^ "jmp .apply_variadic_copy_rest_of_stack_loop\n"
-    ^ ".apply_variadic_copy_rest_of_stack_end:\n"
-  in
-  let push_correct_args_count_to_stack = 
-    "; We have the length of the list in rcx, so we need to add it to the current args number (currently in rax) minus 2 (the list and the function to apply)\n"
-    ^ "add rcx, rax\n"
-    ^ "sub rcx, 2\n"
-    ^ "push rcx\n"
-  in
-  let get_proc_to_rax = "mov rax, PVAR(0) ; Get the closure to rax\n" in
-
-  let push_same_env_to_stack = 
-    "; No need to extend the env, we just need to copy it\n"
-    ^ "push qword [rax + TYPE_SIZE] ; Push closure env\n"
-  in
-  let push_old_ret_addr = "push qword [rbp + 8] ; Push old return address\n" in
-  
-  (* Beginning of copied applic_tp logic *)
-  let save_rbp = "mov rdi, rbp ; save current frame base pointer" in
-  let save_rsp = "mov rsi, rsp ; save current frame top pointer" in
-  let restore_old_frame_pointer = "mov rbp, qword [rbp] ; Restore old frame pointer" in
-  let overwrite_existing_frame = ";;; Overwriting Existing Frame\n"
-  ^ "; set the number of bytes to copy in rcx\n"
-  ^ "mov rcx, rdi\n"
-  ^ "sub rcx, rsi\n"
-  ^ "; increase rsi to point to the top of the current data to run over with\n"
-  ^ "mov rsi, rdi\n"
-  ^ "; increase rdi to point to the base of this frame\n"
-  ^ "add rdi, WORD_SIZE*3 ; pass old rbp, ret addr, env\n"
-  ^ "mov r8, qword[rdi] ; extract args number\n"
-  ^ "shl r8, 3 ; multiple by 8\n"
-  ^ "add rdi, 8 ; pass args count\n"
-  ^ "add rdi, r8 ; pass all args\n"
-  ^ "; the copy loop\n"
-  ^ ".apply_OverWritingLoop:\n"
-  ^ "cmp rcx, 0\n"
-  ^ "je .apply_OverWritingLoopEnd\n"
-  ^ "sub rdi, 8\n"
-  ^ "sub rsi, 8\n"
-  ^ "mov r8, qword[rsi]\n"
-  ^ "mov qword[rdi], r8\n"
-  ^ "sub rcx, 8\n"
-  ^ "jmp .apply_OverWritingLoop\n"
-  ^ ".apply_OverWritingLoopEnd:\n"
-  ^ "; fix stack pointer\n"
-  ^ "mov rsp, rdi\n" in
-  (* End of copied applic_tp logic *)
-  let apply_applic_tp_logic = String.concat "\n" [
-    save_rbp;
-    save_rsp;
-    restore_old_frame_pointer;
-    overwrite_existing_frame
-  ]
-  in
-  let jmp_to_procedure_code = 
-    "; Assuming the closure is in RAX, jmp to the code\n"
-    ^ "CLOSURE_CODE rax, rax ; Move closure code to rax\n"
-    ^ "jmp rax\n"
-  in
-  let apply_code = String.concat "\n" [
-    begin_apply;
-    get_last_arg_to_rax;
-    push_all_members_of_list_to_stack;
-    reverse_array_between_rsi_and_rdi;
-    copy_rest_of_args_to_the_stack;
-    push_correct_args_count_to_stack;
-    get_proc_to_rax;
-    push_same_env_to_stack;
-    push_old_ret_addr;
-    apply_applic_tp_logic;
-    jmp_to_procedure_code;
-  ]
-  in
-  apply_code
-;;
   (* This is the interface of the module. It constructs a large x86 64-bit string using the routines
      defined above. The main compiler pipline code (in compiler.ml) calls into this module to get the
      string of primitive procedures. *)
-     let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs;apply_variadic];;
+     let procs = String.concat "\n\n" [type_queries ; numeric_ops; misc_ops;procedurs];;
      end;;
