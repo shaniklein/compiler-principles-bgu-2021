@@ -137,6 +137,10 @@ module Code_Gen : CODE_GEN = struct
         else get_const_address c cdr  ;;
 
 
+  let format_str_as_char_list str =
+    if String.length str = 0 then "\"\"" else
+    let lst = List.map Char.code (string_to_list str) in
+    String.concat ", "( List.map (Printf.sprintf "%d") lst )
 
   (* Create Assembly strings *)
   let make_string_lit_rat a b = 
@@ -149,7 +153,8 @@ module Code_Gen : CODE_GEN = struct
     "MAKE_LITERAL_FLOAT("^sa^")";;
 
   let make_string_lit_string s = 
-    "MAKE_LITERAL_STRING"^"\""^s^"\"";;
+    let s= format_str_as_char_list s in
+    "MAKE_LITERAL_STRING "^s;;
 
   let make_string_lit_symbol n = 
     let sn = string_of_int n in
